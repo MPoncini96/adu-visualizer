@@ -73,34 +73,32 @@ async function femaStructures(ring) {
     .map((f) => ({ ring: f.geometry.coordinates[0], kind: "building", source: "FEMA USA Structures", sqft: f.properties?.SQFEET ?? null }));
 }
 
-// Streets (to find the street side) and pools from OpenStreetMap via Overpass
-async function osmNearby(ring) {
-  const [w, s, e, n] = bboxOf(ring, 0.0005);
-  const bb = `${s},${w},${n},${e}`;
-  const q = `[out:json][timeout:8];(way["highway"~"^(residential|primary|secondary|tertiary|unclassified|living_street|trunk|service)$"](${bb});way["leisure"="swimming_pool"](${bb}););out geom;`;
-  const res = await fetch("https://overpass-api.de/api/interpreter", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "valley-adu-studio-demo" },
-    body: "data=" + encodeURIComponent(q),
-    signal: AbortSignal.timeout(8000),
-    next: { revalidate: 86400 },
+// Neighboring parcels from the same county layer. A lot line with no neighbor across it
+// faces the street (or open land), which tells us where the front of the lot is.
+async function neighborParcels(c, ring) {
+  if (!c) return [];
+  const [w, s, e, n] = bboxOf(ring, 0.00025);
+  const params = new URLSearchParams({
+    f: "geojson", geometry: `${w},${s},${e},${n}`, geometryType: "esriGeometryEnvelope", inSR: "4326",
+    spatialRel: "esriSpatialRelIntersects", outFields: "APN", returnGeometry: "true", outSR: "4326",
   });
-  if (!res.ok) return { streets: [], pools: [] };
+  const res = await fetch(`${c.url}?${params}`, { signal: AbortSignal.timeout(6000), next: { revalidate: 86400 } });
+  if (!res.ok) return [];
   const data = await res.json();
-  const streets = [], pools = [];
-  for (const el of data.elements || []) {
-    const line = (el.geometry || []).map((p) => [p.lon, p.lat]);
-    if (el.tags?.highway) streets.push({ line, name: el.tags.name || null, type: el.tags.highway });
-    else if (el.tags?.leisure === "swimming_pool") pools.push({ ring: line, kind: "pool", source: "OpenStreetMap" });
-  }
-  return { streets, pools };
+  return (data.features || []).filter((f) => f.geometry?.type === "Polygon").map((f) => f.geometry.coordinates[0]);
+}
+
+function countyFor(lng, lat) {
+  return COUNTIES.find((c) => { const [s, n, w, e] = c.bbox; return lat >= s && lat <= n && lng >= w && lng <= e; });
 }
 
 async function siteContext(ring) {
-  const [fema, osm] = await Promise.allSettled([femaStructures(ring), osmNearby(ring)]);
-  const structures = fema.status === "fulfilled" ? fema.value : [];
-  const { streets, pools } = osm.status === "fulfilled" ? osm.value : { streets: [], pools: [] };
-  return { structures: [...structures, ...pools], streets };
+  const c0 = ring.reduce((a, p) => [a[0] + p[0] / ring.length, a[1] + p[1] / ring.length], [0, 0]);
+  const [fema, nb] = await Promise.allSettled([femaStructures(ring), neighborParcels(countyFor(c0[0], c0[1]), ring)]);
+  return {
+    structures: fema.status === "fulfilled" ? fema.value : [],
+    neighbors: nb.status === "fulfilled" ? nb.value : [],
+  };
 }
 
 export async function GET(req) {
@@ -135,6 +133,6 @@ export async function POST(req) {
     if (!Array.isArray(ring) || ring.length < 3) return Response.json({ error: "ring required" }, { status: 400 });
     return Response.json(await siteContext(ring.slice(0, 200)));
   } catch {
-    return Response.json({ structures: [], streets: [] });
+    return Response.json({ structures: [], neighbors: [] });
   }
 }

@@ -26,6 +26,7 @@ export default function View3D({ position, heading, src, outline, heightM, overl
   const els = useRef({});
   const [error, setError] = useState(null);
   const [mode, setMode] = useState("solid"); // solid | model
+  const [hasModel, setHasModel] = useState(false);
 
   useEffect(() => {
     let map;
@@ -48,7 +49,7 @@ export default function View3D({ position, heading, src, outline, heightM, overl
         const ring = outline.map((p) => ({ lat: p.lat, lng: p.lng }));
         const closed = [...ring, ring[0]];
 
-        const model = new Model3DElement({
+        const model = Model3DElement && new Model3DElement({
           src: new URL(src, location.origin).href,
           position: { lat: position.lat, lng: position.lng, altitude: 0 },
           altitudeMode: "CLAMP_TO_GROUND",
@@ -83,7 +84,8 @@ export default function View3D({ position, heading, src, outline, heightM, overl
         const ground = mkLine(0.3);
         const top = mkLine(heightM);
 
-        map.append(solid, model, ground, top);
+        map.append(solid, ground, top);
+        setHasModel(!!model);
         els.current = { map, solid, model, ground, top };
         applyMode(els.current, "solid");
         hostRef.current.append(map);
@@ -101,7 +103,7 @@ export default function View3D({ position, heading, src, outline, heightM, overl
       {overlap && <div className="view3d-warn">Heads up: the ADU overlaps the existing {overlap.toLowerCase()}.</div>}
       <div className="view3d-toggle" role="group" aria-label="3D display">
         <button className={mode === "solid" ? "on" : ""} onClick={() => setMode("solid")}>Highlight</button>
-        <button className={mode === "model" ? "on" : ""} onClick={() => setMode("model")}>House model</button>
+        {hasModel && <button className={mode === "model" ? "on" : ""} onClick={() => setMode("model")}>House model</button>}
       </div>
       <div className="view3d-bar">
         <span>Orange outline = your ADU. Drag to orbit, scroll to zoom. In rural areas without 3D imagery the ground will look flat.</span>
@@ -118,6 +120,6 @@ function applyMode(e, mode) {
     if (on && !el.isConnected) e.map.append(el);
     if (!on && el.isConnected) el.remove();
   };
-  set(e.solid, mode === "solid");
-  set(e.model, mode === "model");
+  set(e.solid, mode === "solid" || !e.model);
+  if (e.model) set(e.model, mode === "model");
 }

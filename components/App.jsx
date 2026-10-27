@@ -28,7 +28,7 @@ export default function App() {
   const [filter, setFilter] = useState("all");
   const [place, setPlace] = useState({ label: DEMO_LOT.label, isDemo: true });
   const [lot, setLot] = useState({ ring: DEMO_LOT.ring, source: "county", county: DEMO_LOT.county });
-  const [site, setSite] = useState({ structures: [], streets: [], loaded: false });
+  const [site, setSite] = useState({ structures: [], neighbors: [], loaded: false });
   const [origin, setOrigin] = useState(() => ringCentroid(DEMO_LOT.ring));
   const [adu, setAdu] = useState(null);
   const [phase, setPhase] = useState("ready"); // ready | loading | out | trace
@@ -69,10 +69,10 @@ export default function App() {
 
   const streetEdge = useMemo(() => {
     if (!lotXY) return null;
-    const streetsXY = site.streets.map((s) => ({ ...s, line: s.line.map(([lng, lat]) => projector.toXY(lat, lng)) }));
-    const hint = house ? centroidXY(house.xy) : place.lat ? projector.toXY(place.lat, place.lng) : place.isDemo ? [0, -30] : null;
-    return findStreetEdge(lotXY, streetsXY, hint);
-  }, [lotXY, site.streets, house, place, projector]);
+    const neighborsXY = site.neighbors.map((r) => closedOpen(r).map(([lng, lat]) => projector.toXY(lat, lng)));
+    const hint = place.lat ? projector.toXY(place.lat, place.lng) : place.isDemo ? [0, -30] : house ? centroidXY(house.xy) : null;
+    return findStreetEdge(lotXY, neighborsXY, hint);
+  }, [lotXY, site.neighbors, house, place, projector]);
   const rear = useMemo(() => {
     if (!lotXY) return null;
     const r = rearDirection(lotXY, streetEdge);
@@ -85,15 +85,15 @@ export default function App() {
     return null;
   }, [lotXY, streetEdge, house]);
 
-  // Fetch buildings + streets for a lot
+  // Fetch buildings + neighboring parcels for a lot
   const loadSite = useCallback(async (ring) => {
-    setSite({ structures: [], streets: [], loaded: false });
+    setSite({ structures: [], neighbors: [], loaded: false });
     try {
       const res = await fetch("/api/parcel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ring }) });
       const data = await res.json();
-      setSite({ structures: data.structures || [], streets: data.streets || [], loaded: true });
+      setSite({ structures: data.structures || [], neighbors: data.neighbors || [], loaded: true });
     } catch {
-      setSite({ structures: [], streets: [], loaded: true });
+      setSite({ structures: [], neighbors: [], loaded: true });
     }
   }, []);
 
@@ -179,7 +179,7 @@ export default function App() {
       const res = await fetch(`/api/parcel?lat=${lat}&lng=${lng}`);
       const data = await res.json();
       if (data.parcel) {
-        setSite({ structures: data.structures || [], streets: data.streets || [], loaded: true });
+        setSite({ structures: data.structures || [], neighbors: data.neighbors || [], loaded: true });
         setOrigin(ringCentroid(data.parcel.ring));
         setLot({ ring: data.parcel.ring, source: "county", county: data.parcel.county });
         setPhase("ready");
@@ -188,7 +188,7 @@ export default function App() {
     } catch {}
     setOrigin({ lat, lng });
     setLot(null);
-    setSite({ structures: [], streets: [], loaded: false });
+    setSite({ structures: [], neighbors: [], loaded: false });
     setTraceTarget("lot");
     setPhase("trace");
   }
@@ -373,9 +373,11 @@ export default function App() {
                       : nearest ? `${fmtFt(fit.nearestM)} from the ${nearest.label.toLowerCase()} · ${fmtFt(fit.lotClearM)} to the closest property line.`
                       : `${fmtFt(fit.lotClearM)} to the closest property line.`}
                   </div>
-                  {!structures.length && site.loaded && (
-                    <div className="fit-body">We couldn't find building outlines for this lot. Make sure it doesn't overlap your house, pool, or garage.</div>
-                  )}
+                  <div className="fit-body small-print">
+                    {structures.length
+                      ? "Building outlines come from public records and don't include pools, sheds or patios. Make sure it doesn't overlap those."
+                      : site.loaded ? "We couldn't find building outlines for this lot. Make sure it doesn't overlap your house, pool, or garage." : "Loading building outlines…"}
+                  </div>
                   <div className="stats">
                     <div><b>{lotSqft ? Math.round(lotSqft).toLocaleString() : "–"}</b><span>lot sq ft</span></div>
                     <div><b>{model.sqft.toLocaleString()}</b><span>ADU sq ft</span></div>
@@ -403,7 +405,7 @@ export default function App() {
         </section>
 
         <footer className="fine">
-          Building outlines from FEMA's USA Structures data and OpenStreetMap; property lines from {lot?.source === "traced" ? "your tracing" : `${lot?.county || "county"} County public records`}. For planning only. Your city's setback, separation and size rules apply; we confirm them before you build.
+          Building outlines from FEMA's USA Structures data; property lines from {lot?.source === "traced" ? "your tracing" : `${lot?.county || "county"} County public records`}. For planning only. Your city's setback, separation and size rules apply; we confirm them before you build.
         </footer>
       </aside>
 
