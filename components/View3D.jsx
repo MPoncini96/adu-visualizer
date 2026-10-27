@@ -33,14 +33,21 @@ export default function View3D({ position, heading, src, outline, heightM, overl
     let cancelled = false;
     loadGoogleMaps()
       .then(async () => {
+        // The 3D camera works in meters above sea level, so aim it at the actual ground height
+        let groundElev = 15;
+        try {
+          const r = await fetch(`/api/elevation?lat=${position.lat}&lng=${position.lng}`, { signal: AbortSignal.timeout(3500) });
+          const j = await r.json();
+          if (Number.isFinite(j.elevation)) groundElev = j.elevation;
+        } catch {}
         const lib = await google.maps.importLibrary("maps3d");
         const { Map3DElement, Model3DElement, Polygon3DElement, Polyline3DElement } = lib;
         if (cancelled) return;
         const o = orientationOffsets();
         // Frame the ADU: ~45 degree tilt, far enough back to see the yard, looking at the front door
         map = new Map3DElement({
-          center: { lat: position.lat, lng: position.lng, altitude: 0 },
-          range: 120,
+          center: { lat: position.lat, lng: position.lng, altitude: groundElev + heightM / 2 },
+          range: 110,
           tilt: 45,
           heading: (heading + 180 + 20) % 360,
           mode: "HYBRID",
