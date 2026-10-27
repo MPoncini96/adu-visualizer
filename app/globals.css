@@ -189,3 +189,4 @@ h1 { font-size: 28px; line-height: 1.15; margin: 0 0 6px; }
 .start-card h2 { margin: 0 0 6px; font-size: 24px; }
 .start-card p { margin: 0 0 14px; color: var(--ink-2); font-size: 14px; }
 .link-btn.inline { margin: 0 0 0 2px; font-size: inherit; }
+.view3d-bar, .view3d-toggle, .view3d-warn { z-index: 2; }

@@ -140,8 +140,9 @@ export default function View3D({ position, heading, src, outline, lotRing, heigh
 function applyMode(e, mode) {
   if (!e.map) return;
   const set = (el, on) => {
-    if (on && !el.isConnected) e.map.append(el);
-    if (!on && el.isConnected) el.remove();
+    // parentNode (not isConnected): the map may not be on the page yet when this first runs
+    if (on && el.parentNode !== e.map) e.map.append(el);
+    if (!on && el.parentNode) el.remove();
   };
   set(e.solid, mode === "solid" || !e.model);
   if (e.model) set(e.model, mode === "model");
