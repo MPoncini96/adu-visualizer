@@ -26,7 +26,7 @@ export default function App() {
   const [modelId, setModelId] = useState("cherry");
   const [styleId, setStyleId] = useState("cottage");
   const [filter, setFilter] = useState("all");
-  const [place, setPlace] = useState({ label: DEMO_LOT.label, isDemo: true });
+  const [place, setPlace] = useState({ label: DEMO_LOT.label });
   const [lot, setLot] = useState({ ring: DEMO_LOT.ring, source: "county", county: DEMO_LOT.county });
   const [site, setSite] = useState({ structures: [], neighbors: [], loaded: false });
   const [origin, setOrigin] = useState(() => ringCentroid(DEMO_LOT.ring));

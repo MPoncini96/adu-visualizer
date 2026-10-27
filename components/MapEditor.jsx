@@ -5,6 +5,24 @@ import { loadGoogleMaps } from "../lib/googleMaps.js";
 
 const FIT_COLORS = { ok: "#2fbf71", tight: "#f2a93b", bad: "#e5484d" };
 
+// A big rectangle around the lot with the lot cut out as a hole (holes need opposite winding).
+function maskPaths(ring) {
+  const pts = ring.map(([lng, lat]) => ({ lat, lng }));
+  const c = pts.reduce((a, p) => ({ lat: a.lat + p.lat / pts.length, lng: a.lng + p.lng / pts.length }), { lat: 0, lng: 0 });
+  const d = 1.5;
+  const outer = [
+    { lat: c.lat + d, lng: c.lng - d }, { lat: c.lat + d, lng: c.lng + d },
+    { lat: c.lat - d, lng: c.lng + d }, { lat: c.lat - d, lng: c.lng - d },
+  ]; // clockwise
+  let area = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    area += a.lng * b.lat - b.lng * a.lat;
+  }
+  const hole = area < 0 ? pts.slice().reverse() : pts; // counter-clockwise
+  return [outer, hole];
+}
+
 export default function MapEditor({ visible = true, projector, origin, lotRing, structures = [], adu, aduXY, doorXY, status, tracing, tracePts, onAduMove, onMapClick, onError }) {
   const divRef = useRef(null);
   const g = useRef({}); // google objects
@@ -67,7 +85,9 @@ export default function MapEditor({ visible = true, projector, origin, lotRing, 
           const [x, y] = cb.current.projector.toXY(e.latLng.lat(), e.latLng.lng());
           cb.current.onMapClick({ x, y, lat: e.latLng.lat(), lng: e.latLng.lng() });
         });
-        g.current = { map, lot, aduPoly, door, trace, Polygon, buildings: [] };
+        // Everything outside the lot is covered so only the property shows
+        const mask = new Polygon({ map, clickable: false, strokeWeight: 0, fillColor: "#e6e9df", fillOpacity: 1, zIndex: 0 });
+        g.current = { map, lot, aduPoly, door, trace, mask };
         divRef.current.dispatchEvent(new Event("gmaps-ready"));
       })
       .catch((e) => onError?.(e));
@@ -78,17 +98,10 @@ export default function MapEditor({ visible = true, projector, origin, lotRing, 
   // Keep overlays in sync with state
   useEffect(() => {
     const sync = () => {
-      const { map, lot, aduPoly, door, trace } = g.current;
+      const { map, lot, aduPoly, door, trace, mask } = g.current;
       if (!map) return;
       lot.setPath((lotRing || []).map(([lng, lat]) => ({ lat, lng })));
-      // existing buildings / pools
-      g.current.buildings.forEach((b) => b.setMap(null));
-      g.current.buildings = structures.map((st) => new g.current.Polygon({
-        map, clickable: false, zIndex: 2,
-        paths: st.ring.map(([lng, lat]) => ({ lat, lng })),
-        strokeColor: "#ffffff", strokeOpacity: 0.9, strokeWeight: 1.5,
-        fillColor: st.label === "Pool" ? "#5ab0ff" : "#ffffff", fillOpacity: 0.18,
-      }));
+      mask.setPaths(lotRing?.length > 2 ? maskPaths(lotRing) : []);
       trace.setPath((tracePts || []).map(({ lat, lng }) => ({ lat, lng })));
       if (!aduXY) { aduPoly.setVisible(false); door.setVisible(false); }
       if (aduXY && projector) {
@@ -102,7 +115,22 @@ export default function MapEditor({ visible = true, projector, origin, lotRing, 
     const el = divRef.current;
     el?.addEventListener("gmaps-ready", sync);
     return () => el?.removeEventListener("gmaps-ready", sync);
-  }, [lotRing, structures, aduXY, doorXY, status, projector, tracing, tracePts]);
+  }, [lotRing, aduXY, doorXY, status, projector, tracing, tracePts]);
+
+  // Zoom to fit the lot whenever a new one loads
+  useEffect(() => {
+    const fit = () => {
+      const { map } = g.current;
+      if (!map || !lotRing?.length) return;
+      const b = new google.maps.LatLngBounds();
+      lotRing.forEach(([lng, lat]) => b.extend({ lat, lng }));
+      map.fitBounds(b, 40);
+    };
+    fit();
+    const el = divRef.current;
+    el?.addEventListener("gmaps-ready", fit);
+    return () => el?.removeEventListener("gmaps-ready", fit);
+  }, [lotRing]);
 
   // The map stays mounted while the site plan is shown (unmounting it lost the imagery).
   // When it becomes visible again, nudge it to redraw its tiles.
@@ -119,9 +147,10 @@ export default function MapEditor({ visible = true, projector, origin, lotRing, 
   // Re-center when the location changes
   useEffect(() => {
     const { map } = g.current;
-    if (map && origin) { map.panTo(origin); map.setZoom(20); }
+    // With a lot loaded, the fit-to-lot effect handles framing; this is for tracing a new lot
+    if (map && origin && !lotRing?.length) { map.panTo(origin); map.setZoom(20); }
     const el = divRef.current;
-    const onReady = () => { g.current.map?.setCenter(origin); };
+    const onReady = () => { if (!lotRing?.length) g.current.map?.setCenter(origin); };
     el?.addEventListener("gmaps-ready", onReady);
     return () => el?.removeEventListener("gmaps-ready", onReady);
   }, [origin?.lat, origin?.lng]);
