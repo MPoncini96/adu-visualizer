@@ -169,3 +169,16 @@ h1 { font-size: 28px; line-height: 1.15; margin: 0 0 6px; }
 .style-btn { display: flex; align-items: center; gap: 7px; border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 7px 8px; font-size: 13px; font-weight: 500; cursor: pointer; text-align: left; line-height: 1.2; }
 .style-btn.on { border-color: var(--green); box-shadow: 0 0 0 2px rgba(47,107,79,.18); }
 .swatch { width: 16px; height: 16px; border-radius: 4px; flex: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
+
+/* round 3 */
+.plan-canvas { z-index: 1; }
+.view-toggle, .stage-note { z-index: 3; }
+.size-note { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+.fit-info { background: #eef3f8; border-color: #c9d8e8; }
+.fit-info .fit-title::before { background: #5a8fc8; }
+.fit .fit-body + .fit-body { margin-top: 6px; }
+.link-btn { border: 0; background: none; padding: 0; margin-top: 10px; color: var(--green); font-weight: 600; font-size: 13px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.view3d-warn { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); background: #fdeeee; color: #8a2a2a; border: 1px solid #f3c3c4; padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 600; box-shadow: var(--shadow); z-index: 2; }
+.view3d-toggle { position: absolute; top: 14px; right: 14px; z-index: 2; display: flex; background: rgba(255,255,255,.95); border-radius: 10px; padding: 3px; box-shadow: var(--shadow); }
+.view3d-toggle button { border: 0; background: transparent; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-weight: 500; font-size: 13px; }
+.view3d-toggle button.on { background: var(--green); color: #fff; }

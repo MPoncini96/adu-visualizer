@@ -3,13 +3,13 @@
 // Run: npm run models
 import { Document, NodeIO } from "@gltf-transform/core";
 import { mkdirSync } from "node:fs";
-import { MODELS, STYLES, footprintFt, doorFt } from "../lib/models.js";
+import { MODELS, STYLES, geometryFt, ROOF } from "../lib/models.js";
 
 const FT = 0.3048;
-const EAVE = 2.75; // top of wall (~9 ft)
-const PITCH = 0.5; // 6/12 roof
+const EAVE = ROOF.eaveFt * FT; // top of wall
+const PITCH = ROOF.pitch; // 6/12 roof
 const OVER = 0.38; // eave overhang
-const ROOF_T = 0.14;
+const ROOF_T = ROOF.thicknessFt * FT;
 
 const WHITE = [0.95, 0.95, 0.93];
 const PALETTES = {
@@ -190,40 +190,36 @@ function gableRoof(mb, { x0, x1, z0, z1, axis, eave = EAVE, ends = ["lo", "hi"],
 function buildHouse(model, style) {
   const pal = PALETTES[style];
   const mb = new MeshBuilder();
-  const outline = footprintFt(model).map(([x, f]) => [x * FT, f * FT]);
-  const d = doorFt(model);
-  const door = { x: d.x * FT, z: d.f * FT };
+  const g = geometryFt(model);
+  const M = (pts) => pts.map(([x, f]) => [x * FT, f * FT]);
+  const body = M(g.body);
+  const door = { x: g.door.x * FT, z: g.door.f * FT };
   const french = model.beds >= 2 && model.shape !== "L";
+  walls(mb, pal, body);
+  openings(mb, body, door, french);
 
   if (model.shape !== "L") {
-    // Rectangle: front-facing gable, covered gable porch over the door (inside the footprint)
-    const W = model.W * FT, D = model.D * FT;
-    const pd = Math.min(1.5, D * 0.16);
-    const front = D / 2 - pd;
-    const body = [[-W / 2, -D / 2], [W / 2, -D / 2], [W / 2, front], [-W / 2, front]];
-    door.z = front;
-    walls(mb, pal, body);
-    openings(mb, body, door, french);
-    gableRoof(mb, { x0: -W / 2, x1: W / 2, z0: -D / 2, z1: front, axis: "z", vent: true });
-
-    const half = Math.min(1.3, W / 2 - 0.2);
-    const px0 = Math.max(-W / 2 + 0.1, door.x - half), px1 = Math.min(W / 2 - 0.1, door.x + half);
-    mb.box("porch", px0 - 0.1, px1 + 0.1, 0, 0.12, front, D / 2);
-    for (const x of [px0 + 0.1, px1 - 0.1]) mb.box("trim", x - 0.08, x + 0.08, 0.12, EAVE - 0.2, D / 2 - 0.25, D / 2 - 0.09);
-    gableRoof(mb, { x0: px0, x1: px1, z0: front - 0.6, z1: D / 2 - 0.1, axis: "z", eave: EAVE - 0.15, ends: ["hi"], overBack: false });
+    // Rectangle: front-facing gable; covered gable porch in front of the door
+    const xs = body.map((p) => p[0]), zs = body.map((p) => p[1]);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), z0 = Math.min(...zs), z1 = Math.max(...zs);
+    gableRoof(mb, { x0, x1, z0, z1, axis: "z", vent: true });
+    if (g.porch) {
+      const px0 = g.porch.x0 * FT, px1 = g.porch.x1 * FT, pz0 = g.porch.f0 * FT, pz1 = g.porch.f1 * FT;
+      mb.box("porch", px0, px1, 0, 0.12, pz0, pz1);
+      for (const x of [px0 + 0.12, px1 - 0.12]) mb.box("trim", x - 0.08, x + 0.08, 0.12, EAVE - 0.2, pz1 - 0.24, pz1 - 0.08);
+      gableRoof(mb, { x0: px0 + 0.05, x1: px1 - 0.05, z0: pz0 - 0.6, z1: pz1 - 0.1, axis: "z", eave: EAVE - 0.15, ends: ["hi"], overBack: false });
+    }
   } else {
     // L: side-gable main body + front-gable wing (cross gable), shed porch in the inside corner
-    const W = model.W * FT, D = model.D * FT, ww = model.ww * FT, wd = model.wd * FT;
-    const s = -wd / 2;
-    const mainZ0 = -D / 2 + s, mainZ1 = D / 2 + s, wingX0 = W / 2 - ww;
-    walls(mb, pal, outline);
-    openings(mb, outline, door, false);
+    const W = model.W * FT;
+    const wingX0 = g.wingX0 * FT;
+    const mainZ0 = g.main.f0 * FT, mainZ1 = g.main.f1 * FT;
+    const wingZ1 = Math.max(...body.map((p) => p[1]));
     gableRoof(mb, { x0: -W / 2, x1: W / 2, z0: mainZ0, z1: mainZ1, axis: "x" });
-    gableRoof(mb, { x0: wingX0, x1: W / 2, z0: (mainZ0 + mainZ1) / 2, z1: mainZ1 + wd, axis: "z", ends: ["hi"], vent: true, overBack: false });
+    gableRoof(mb, { x0: wingX0, x1: W / 2, z0: (mainZ0 + mainZ1) / 2, z1: wingZ1, axis: "z", ends: ["hi"], vent: true, overBack: false });
 
-    const depth = Math.min(1.7, wd - 0.2);
-    const px0 = Math.max(-W / 2 + 0.2, door.x - 1.6), px1 = wingX0;
-    const pz0 = mainZ1, pz1 = mainZ1 + depth;
+    const px0 = g.porch.x0 * FT, px1 = g.porch.x1 * FT, pz0 = g.porch.f0 * FT, pz1 = g.porch.f1 * FT;
+    const depth = pz1 - pz0;
     mb.box("porch", px0, px1, 0, 0.12, pz0, pz1);
     mb.box("trim", px0 + 0.05, px0 + 0.21, 0.12, EAVE - 0.35, pz1 - 0.21, pz1 - 0.05);
     const yTop = EAVE - 0.08, yLow = yTop - (depth + 0.25) * 0.3;

@@ -5,7 +5,7 @@ import { loadGoogleMaps } from "../lib/googleMaps.js";
 
 const FIT_COLORS = { ok: "#2fbf71", tight: "#f2a93b", bad: "#e5484d" };
 
-export default function MapEditor({ projector, origin, lotRing, adu, aduXY, doorXY, status, tracing, tracePts, onAduMove, onMapClick, onError }) {
+export default function MapEditor({ visible = true, projector, origin, lotRing, structures = [], adu, aduXY, doorXY, status, tracing, tracePts, onAduMove, onMapClick, onError }) {
   const divRef = useRef(null);
   const g = useRef({}); // google objects
   const dragging = useRef(false);
@@ -67,7 +67,7 @@ export default function MapEditor({ projector, origin, lotRing, adu, aduXY, door
           const [x, y] = cb.current.projector.toXY(e.latLng.lat(), e.latLng.lng());
           cb.current.onMapClick({ x, y, lat: e.latLng.lat(), lng: e.latLng.lng() });
         });
-        g.current = { map, lot, aduPoly, door, trace };
+        g.current = { map, lot, aduPoly, door, trace, Polygon, buildings: [] };
         divRef.current.dispatchEvent(new Event("gmaps-ready"));
       })
       .catch((e) => onError?.(e));
@@ -81,10 +81,19 @@ export default function MapEditor({ projector, origin, lotRing, adu, aduXY, door
       const { map, lot, aduPoly, door, trace } = g.current;
       if (!map) return;
       lot.setPath((lotRing || []).map(([lng, lat]) => ({ lat, lng })));
+      // existing buildings / pools
+      g.current.buildings.forEach((b) => b.setMap(null));
+      g.current.buildings = structures.map((st) => new g.current.Polygon({
+        map, clickable: false, zIndex: 2,
+        paths: st.ring.map(([lng, lat]) => ({ lat, lng })),
+        strokeColor: "#ffffff", strokeOpacity: 0.9, strokeWeight: 1.5,
+        fillColor: st.label === "Pool" ? "#5ab0ff" : "#ffffff", fillOpacity: 0.18,
+      }));
       trace.setPath((tracePts || []).map(({ lat, lng }) => ({ lat, lng })));
+      if (!aduXY) { aduPoly.setVisible(false); door.setVisible(false); }
       if (aduXY && projector) {
         if (!dragging.current) aduPoly.setPath(aduXY.map(([x, y]) => projector.toLatLng(x, y)));
-        aduPoly.setOptions({ fillColor: FIT_COLORS[status] || FIT_COLORS.ok, visible: !tracing });
+        aduPoly.setOptions({ fillColor: FIT_COLORS[status] || FIT_COLORS.ok, visible: !tracing, draggable: !tracing });
         door.setPath(doorXY.map(([x, y]) => projector.toLatLng(x, y)));
         door.setVisible(!tracing && !dragging.current);
       }
@@ -93,7 +102,19 @@ export default function MapEditor({ projector, origin, lotRing, adu, aduXY, door
     const el = divRef.current;
     el?.addEventListener("gmaps-ready", sync);
     return () => el?.removeEventListener("gmaps-ready", sync);
-  }, [lotRing, aduXY, doorXY, status, projector, tracing, tracePts]);
+  }, [lotRing, structures, aduXY, doorXY, status, projector, tracing, tracePts]);
+
+  // The map stays mounted while the site plan is shown (unmounting it lost the imagery).
+  // When it becomes visible again, nudge it to redraw its tiles.
+  useEffect(() => {
+    const { map } = g.current;
+    if (!visible || !map) return;
+    const c = map.getCenter();
+    requestAnimationFrame(() => {
+      google.maps.event.trigger(map, "resize");
+      if (c) map.setCenter(c);
+    });
+  }, [visible]);
 
   // Re-center when the location changes
   useEffect(() => {
@@ -105,5 +126,13 @@ export default function MapEditor({ projector, origin, lotRing, adu, aduXY, door
     return () => el?.removeEventListener("gmaps-ready", onReady);
   }, [origin?.lat, origin?.lng]);
 
-  return <div ref={divRef} className="map-canvas" aria-label="Satellite map of the lot" />;
+  return (
+    <div
+      ref={divRef}
+      className="map-canvas"
+      aria-label="Satellite map of the lot"
+      aria-hidden={!visible}
+      style={visible ? undefined : { visibility: "hidden", pointerEvents: "none" }}
+    />
+  );
 }

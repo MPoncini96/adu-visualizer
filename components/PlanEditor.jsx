@@ -6,7 +6,7 @@ import { FT } from "../lib/geo.js";
 
 const FIT_COLORS = { ok: "#2fbf71", tight: "#f2a93b", bad: "#e5484d" };
 
-export default function PlanEditor({ lotXY, adu, aduXY, doorXY, status, tracing, traceXY, onAduMove, onMapClick, projector }) {
+export default function PlanEditor({ lotXY, structures = [], streetEdge = null, adu, aduXY, doorXY, status, tracing, traceXY, onAduMove, onMapClick, projector }) {
   const svgRef = useRef(null);
   const [drag, setDrag] = useState(null);
 
@@ -71,6 +71,35 @@ export default function PlanEditor({ lotXY, adu, aduXY, doorXY, status, tracing,
       <rect x={box.x} y={box.y} width={box.size} height={box.size} fill="#eef0e6" />
       <g stroke="#d7dbc9" strokeWidth={0.08}>{grid}</g>
       {lotXY?.length > 2 && <polygon points={pts(lotXY)} fill="#fbf6df" stroke="#c99a12" strokeWidth={0.35} />}
+      {structures.map((st, i) => {
+        const c = st.xy.reduce((a, p) => [a[0] + p[0] / st.xy.length, a[1] + p[1] / st.xy.length], [0, 0]);
+        const pool = st.label === "Pool";
+        return (
+          <g key={i} pointerEvents="none">
+            <polygon points={pts(st.xy)} fill={pool ? "#cfe6fa" : "#d9d6cc"} stroke={pool ? "#5a95c8" : "#8d877a"} strokeWidth={0.18} />
+            <text x={c[0]} y={-c[1]} fontSize={1.1} textAnchor="middle" dominantBaseline="middle" fill="#5d584d" fontWeight="600">{st.label}</text>
+          </g>
+        );
+      })}
+      {streetEdge && lotXY && (() => {
+        const a = lotXY[streetEdge.index], b = lotXY[(streetEdge.index + 1) % lotXY.length];
+        const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+        const c = lotXY.reduce((acc, p) => [acc[0] + p[0] / lotXY.length, acc[1] + p[1] / lotXY.length], [0, 0]);
+        let n = [-(b[1] - a[1]), b[0] - a[0]];
+        const l = Math.hypot(...n); n = [n[0] / l, n[1] / l];
+        if ((mid[0] - c[0]) * n[0] + (mid[1] - c[1]) * n[1] < 0) n = [-n[0], -n[1]];
+        const p = [mid[0] + n[0] * 3, mid[1] + n[1] * 3];
+        let ang = (Math.atan2(-(b[1] - a[1]), b[0] - a[0]) * 180) / Math.PI;
+        if (ang > 90) ang -= 180;
+        if (ang < -90) ang += 180;
+        const label = streetEdge.name ? `${streetEdge.name.toUpperCase()} · STREET SIDE` : "STREET SIDE";
+        return (
+          <g pointerEvents="none">
+            <line x1={a[0] + n[0] * 1.2} y1={-(a[1] + n[1] * 1.2)} x2={b[0] + n[0] * 1.2} y2={-(b[1] + n[1] * 1.2)} stroke="#9aa190" strokeWidth={0.15} strokeDasharray="0.8 0.6" />
+            <text x={p[0]} y={-p[1]} fontSize={1.05} letterSpacing={0.18} textAnchor="middle" dominantBaseline="middle" fill="#55604f" fontWeight="600" transform={`rotate(${ang} ${p[0]} ${-p[1]})`}>{label}</text>
+          </g>
+        );
+      })()}
       {traceXY?.length > 0 && (
         <>
           <polyline points={pts(traceXY)} fill="none" stroke="#c99a12" strokeWidth={0.35} strokeDasharray="1 0.6" />

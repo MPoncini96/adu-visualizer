@@ -1,9 +1,12 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { MODELS, STYLES, FILTERS, modelSrc, footprintFt, doorFt } from "../lib/models.js";
+import { MODELS, STYLES, FILTERS, modelSrc, footprintFt, doorFt, findModel, heightLabel } from "../lib/models.js";
 import { DEMO_LOT } from "../lib/demo.js";
-import { FT, makeProjector, ringCentroid, closedOpen, areaM2, placeXY, checkFit, suggestPlacement } from "../lib/geo.js";
+import {
+  FT, makeProjector, ringCentroid, closedOpen, areaM2, centroidXY, placeXY, checkFit, insidePolygon,
+  suggestPlacement, nudgeInside, findStreetEdge, rearDirection, alignedHeadings, pointInPolygon,
+} from "../lib/geo.js";
 import { inServiceArea, milesFromHwy99, MAX_MILES } from "../lib/serviceArea.js";
 import { GOOGLE_KEY } from "../lib/googleMaps.js";
 import PlanEditor from "./PlanEditor.jsx";
@@ -14,68 +17,154 @@ const MapEditor = dynamic(() => import("./MapEditor.jsx"), { ssr: false });
 const View3D = dynamic(() => import("./View3D.jsx"), { ssr: false });
 const ARModal = dynamic(() => import("./ARModal.jsx"), { ssr: false });
 
-const MIN_SETBACK_FT = 4;
+const HOUSE_GAP_FT = 6; // soft warning below this; 6-10 ft is the usual rule of thumb
 const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 const compass = (deg) => COMPASS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+const fmtFt = (m) => `${(m / FT).toFixed(1)} ft`;
 
 export default function App() {
-  const [modelId, setModelId] = useState("ripon");
+  const [modelId, setModelId] = useState("cherry");
   const [styleId, setStyleId] = useState("cottage");
   const [filter, setFilter] = useState("all");
   const [place, setPlace] = useState({ label: DEMO_LOT.label, isDemo: true });
   const [lot, setLot] = useState({ ring: DEMO_LOT.ring, source: "county", county: DEMO_LOT.county });
+  const [site, setSite] = useState({ structures: [], streets: [], loaded: false });
   const [origin, setOrigin] = useState(() => ringCentroid(DEMO_LOT.ring));
   const [adu, setAdu] = useState(null);
   const [phase, setPhase] = useState("ready"); // ready | loading | out | trace
+  const [traceTarget, setTraceTarget] = useState("lot"); // lot | structure
   const [message, setMessage] = useState("");
+  const [notice, setNotice] = useState("");
   const [trace, setTrace] = useState([]); // [{lat,lng}]
   const [view, setView] = useState(GOOGLE_KEY ? "map" : "plan");
   const [mapsFailed, setMapsFailed] = useState(false);
   const [show3D, setShow3D] = useState(false);
   const [showAR, setShowAR] = useState(false);
   const [showQuote, setShowQuote] = useState(false);
+  const lastValid = useRef(null);
+  const userMoved = useRef(false);
 
   const model = MODELS.find((m) => m.id === modelId);
+  const isConversion = !!model.conversion;
   const shape = useMemo(() => shapeOf(model), [model]);
   const projector = useMemo(() => makeProjector(origin), [origin]);
   const lotXY = useMemo(() => (lot ? closedOpen(lot.ring).map(([lng, lat]) => projector.toXY(lat, lng)) : null), [lot, projector]);
   const traceXY = useMemo(() => trace.map((p) => projector.toXY(p.lat, p.lng)), [trace, projector]);
 
-  // Deep link from the AR QR code: ?model=..&style=..&ar=1
+  // Existing structures on this lot (centroid inside the lot), largest building labeled "House"
+  const structures = useMemo(() => {
+    if (!lotXY) return [];
+    const list = site.structures
+      .map((s) => ({ ...s, xy: closedOpen(s.ring).map(([lng, lat]) => projector.toXY(lat, lng)) }))
+      .filter((s) => s.xy.length >= 3 && (s.kind === "traced" || pointInPolygon(centroidXY(s.xy), lotXY)))
+      .map((s) => ({ ...s, area: areaM2(s.xy) }));
+    const buildings = list.filter((s) => s.kind !== "pool").sort((a, b) => b.area - a.area);
+    return list.map((s) => ({
+      ...s,
+      label: s.kind === "pool" ? "Pool" : s === buildings[0] ? "House" : s.kind === "traced" ? "Structure" : "Building",
+    }));
+  }, [site.structures, lotXY, projector]);
+  const structuresXY = useMemo(() => structures.map((s) => s.xy), [structures]);
+  const house = structures.find((s) => s.label === "House");
+
+  const streetEdge = useMemo(() => {
+    if (!lotXY) return null;
+    const streetsXY = site.streets.map((s) => ({ ...s, line: s.line.map(([lng, lat]) => projector.toXY(lat, lng)) }));
+    const hint = house ? centroidXY(house.xy) : place.lat ? projector.toXY(place.lat, place.lng) : place.isDemo ? [0, -30] : null;
+    return findStreetEdge(lotXY, streetsXY, hint);
+  }, [lotXY, site.streets, house, place, projector]);
+  const rear = useMemo(() => {
+    if (!lotXY) return null;
+    const r = rearDirection(lotXY, streetEdge);
+    if (r) return r;
+    if (house) {
+      const c = centroidXY(lotXY), h = centroidXY(house.xy);
+      const v = [c[0] - h[0], c[1] - h[1]], l = Math.hypot(...v);
+      if (l > 0.5) return [v[0] / l, v[1] / l];
+    }
+    return null;
+  }, [lotXY, streetEdge, house]);
+
+  // Fetch buildings + streets for a lot
+  const loadSite = useCallback(async (ring) => {
+    setSite({ structures: [], streets: [], loaded: false });
+    try {
+      const res = await fetch("/api/parcel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ring }) });
+      const data = await res.json();
+      setSite({ structures: data.structures || [], streets: data.streets || [], loaded: true });
+    } catch {
+      setSite({ structures: [], streets: [], loaded: true });
+    }
+  }, []);
+
+  // Deep links (?model=..&style=..&ar=1) and the demo lot's site data
   useEffect(() => {
     const q = new URLSearchParams(location.search);
-    if (MODELS.some((m) => m.id === q.get("model"))) setModelId(q.get("model"));
+    const m = findModel(q.get("model"));
+    if (m) setModelId(m.id);
     if (STYLES.some((s) => s.id === q.get("style"))) setStyleId(q.get("style"));
     if (q.get("ar") === "1") setShowAR(true);
+    loadSite(DEMO_LOT.ring);
     const fail = () => { setMapsFailed(true); setView("plan"); };
     window.addEventListener("gmaps-auth-failure", fail);
     return () => window.removeEventListener("gmaps-auth-failure", fail);
-  }, []);
+  }, [loadSite]);
 
-  // Place the ADU whenever a new lot arrives
-  const placeOnLot = useCallback((xy, shp, housePointXY) => {
-    const s = suggestPlacement(xy, shp.pts, housePointXY, MIN_SETBACK_FT * FT + 0.3);
-    setAdu({ x: s.x, y: s.y, heading: s.heading });
-  }, []);
+  const autoPlace = useCallback((shp = shape) => {
+    if (!lotXY) return;
+    const s = suggestPlacement(lotXY, shp.pts, { rear, structuresXY });
+    const next = { x: s.x, y: s.y, heading: s.heading };
+    setAdu(next);
+    if (insidePolygon(placeXY(shp.pts, next.x, next.y, next.heading), lotXY)) lastValid.current = next;
+    if (s.noFit) setNotice("This plan doesn't fit inside this lot. Try a smaller plan.");
+  }, [lotXY, rear, structuresXY, shape]);
+
+  // Place automatically when a lot loads, and again once its buildings arrive (unless moved by hand)
+  useEffect(() => {
+    if (!lotXY || phase !== "ready") return;
+    if (!adu || (!userMoved.current && site.loaded)) autoPlace();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lotXY, site.loaded, phase]);
+
+  const aduXY = useMemo(() => (adu && !isConversion ? placeXY(shape.pts, adu.x, adu.y, adu.heading) : null), [adu, shape, isConversion]);
+  const doorXY = useMemo(() => (adu && !isConversion ? placeXY(shape.door, adu.x, adu.y, adu.heading) : null), [adu, shape, isConversion]);
+  const fit = useMemo(() => (lotXY && aduXY ? checkFit(lotXY, aduXY, structuresXY) : null), [lotXY, aduXY, structuresXY]);
+
+  let status = "ok";
+  if (fit) {
+    if (!fit.inside || fit.overlapIdx >= 0) status = "bad";
+    else if (fit.nearestIdx >= 0 && fit.nearestM < HOUSE_GAP_FT * FT) status = "tight";
+  }
+  const lotSqft = lotXY ? areaM2(lotXY) / (FT * FT) : null;
 
   useEffect(() => {
-    if (lotXY && !adu) {
-      // Demo lot: house sits toward the street on the south end (Wawona St), so the ADU goes in back.
-      placeOnLot(lotXY, shape, place.isDemo ? [0, -30] : null);
-    }
-  }, [lotXY, adu, shape, place.isDemo, placeOnLot]);
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(""), 4500);
+    return () => clearTimeout(t);
+  }, [notice]);
 
-  const aduXY = useMemo(() => (adu ? placeXY(shape.pts, adu.x, adu.y, adu.heading) : null), [adu, shape]);
-  const doorXY = useMemo(() => (adu ? placeXY(shape.door, adu.x, adu.y, adu.heading) : null), [adu, shape]);
-  const fit = useMemo(() => (lotXY && aduXY ? checkFit(lotXY, aduXY) : null), [lotXY, aduXY]);
-  const clearanceFt = fit ? fit.clearanceM / FT : 0;
-  const status = !fit ? "ok" : !fit.inside || clearanceFt < MIN_SETBACK_FT ? "bad" : clearanceFt < 6 ? "tight" : "ok";
-  const lotSqft = lotXY ? areaM2(lotXY) / (FT * FT) : null;
+  // --- moving the ADU: the lot line is a hard boundary
+  const fitsLot = (a, shp = shape) => lotXY && insidePolygon(placeXY(shp.pts, a.x, a.y, a.heading), lotXY);
+  function moveAdu({ x, y, live, src }) {
+    if (!adu) return;
+    const next = { ...adu, x, y };
+    userMoved.current = true;
+    if (fitsLot(next)) {
+      lastValid.current = next;
+      setAdu(next);
+    } else if (src === "map" && live) {
+      setAdu(next); // show it red while dragging; snaps back on release
+    } else if (!live && lastValid.current) {
+      setAdu({ ...lastValid.current });
+      setNotice("The ADU can't cross the property line.");
+    }
+  }
 
   async function selectAddress({ lat, lng, label }) {
     setShow3D(false);
     setMessage("");
     setTrace([]);
+    userMoved.current = false;
     if (!inServiceArea(lat, lng)) {
       setPlace({ label });
       setPhase("out");
@@ -84,30 +173,24 @@ export default function App() {
     }
     setPhase("loading");
     setPlace({ label, lat, lng });
+    setAdu(null);
+    lastValid.current = null;
     try {
       const res = await fetch(`/api/parcel?lat=${lat}&lng=${lng}`);
       const data = await res.json();
       if (data.parcel) {
-        const ring = data.parcel.ring;
-        const o = ringCentroid(ring);
-        const proj = makeProjector(o);
-        const xy = closedOpen(ring).map(([x, y]) => proj.toXY(y, x));
-        setOrigin(o);
-        setLot({ ring, source: "county", county: data.parcel.county });
-        placeOnLot(xy, shape, proj.toXY(lat, lng));
+        setSite({ structures: data.structures || [], streets: data.streets || [], loaded: true });
+        setOrigin(ringCentroid(data.parcel.ring));
+        setLot({ ring: data.parcel.ring, source: "county", county: data.parcel.county });
         setPhase("ready");
-      } else {
-        setOrigin({ lat, lng });
-        setLot(null);
-        setAdu(null);
-        setPhase("trace");
+        return;
       }
-    } catch {
-      setOrigin({ lat, lng });
-      setLot(null);
-      setAdu(null);
-      setPhase("trace");
-    }
+    } catch {}
+    setOrigin({ lat, lng });
+    setLot(null);
+    setSite({ structures: [], streets: [], loaded: false });
+    setTraceTarget("lot");
+    setPhase("trace");
   }
 
   function onMapClick({ x, y, lat, lng }) {
@@ -115,55 +198,75 @@ export default function App() {
       if (lat != null) setTrace((t) => [...t, { lat, lng }]);
       return;
     }
-    if (lotXY && adu) setAdu((a) => ({ ...a, x, y }));
+    if (!lotXY || !adu || isConversion) return;
+    userMoved.current = true;
+    const next = { ...adu, x, y };
+    if (fitsLot(next)) { lastValid.current = next; setAdu(next); return; }
+    const n = nudgeInside(lotXY, shape.pts, x, y, adu.heading);
+    if (n) { lastValid.current = n; setAdu(n); } else setNotice("There isn't room for it there.");
+  }
+
+  function startStructureTrace() {
+    setTrace([]);
+    setTraceTarget("structure");
+    setPhase("trace");
   }
 
   function finishTrace() {
     if (trace.length < 3) return;
     const ring = trace.map((p) => [p.lng, p.lat]);
-    const o = ringCentroid(ring);
-    const proj = makeProjector(o);
-    const xy = ring.map(([x, y]) => proj.toXY(y, x));
-    setOrigin(o);
-    setLot({ ring, source: "traced" });
-    placeOnLot(xy, shape, place.lat ? proj.toXY(place.lat, place.lng) : null);
     setTrace([]);
+    if (traceTarget === "structure") {
+      setSite((s) => ({ ...s, structures: [...s.structures, { ring, kind: "traced", source: "Traced" }], loaded: true }));
+      setPhase("ready");
+      return;
+    }
+    userMoved.current = false;
+    setAdu(null);
+    setOrigin(ringCentroid(ring));
+    setLot({ ring, source: "traced" });
+    loadSite(ring);
     setPhase("ready");
+  }
+
+  function cancelTrace() {
+    setTrace([]);
+    setPhase(lot ? "ready" : "trace");
+  }
+
+  function setHeading(h) {
+    if (!adu) return;
+    userMoved.current = true;
+    const next = { ...adu, heading: Math.round(((((h % 360) + 360) % 360)) * 10) / 10 };
+    if (fitsLot(next)) { lastValid.current = next; setAdu(next); return; }
+    const n = nudgeInside(lotXY, shape.pts, next.x, next.y, next.heading);
+    if (n) { lastValid.current = n; setAdu(n); setNotice("Moved it in a little so it stays inside the lot."); }
+    else setNotice("Not enough room to turn it here.");
+  }
+  const rotate = (delta) => adu && setHeading(adu.heading + delta);
+  function squareToLot() {
+    if (!lotXY || !adu) return;
+    setHeading(alignedHeadings(lotXY, adu.heading)[0]);
   }
 
   // Switching plans keeps the spot if the new plan still fits there; otherwise re-place it.
   function chooseModel(m) {
     setModelId(m.id);
-    if (!lotXY || !adu) return;
-    const d = shapeOf(m);
-    const f = checkFit(lotXY, placeXY(d.pts, adu.x, adu.y, adu.heading));
-    if (!f.inside || f.clearanceM < MIN_SETBACK_FT * FT) {
-      placeOnLot(lotXY, d, place.isDemo ? [0, -30] : place.lat ? projector.toXY(place.lat, place.lng) : null);
-    }
-  }
-
-  function rotate(delta) {
-    setAdu((a) => a && { ...a, heading: (((a.heading + delta) % 360) + 360) % 360 });
-  }
-
-  function squareToLot() {
-    if (!lotXY || !adu) return;
-    let best = null;
-    for (let i = 0; i < lotXY.length; i++) {
-      const a = lotXY[i], b = lotXY[(i + 1) % lotXY.length];
-      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-      if (!best || len > best.len) best = { len, ang: (Math.atan2(b[0] - a[0], b[1] - a[1]) * 180) / Math.PI };
-    }
-    const options = [0, 90, 180, 270].map((k) => (((best.ang + k) % 360) + 360) % 360);
-    const diff = (h) => Math.abs(((h - adu.heading + 540) % 360) - 180);
-    const h = options.sort((p, q) => diff(p) - diff(q))[0];
-    setAdu({ ...adu, heading: Math.round(h * 10) / 10 });
+    if (!lotXY || m.conversion) return;
+    const shp = shapeOf(m);
+    const here = adu && placeXY(shp.pts, adu.x, adu.y, adu.heading);
+    const ok = userMoved.current && here && insidePolygon(here, lotXY) && checkFit(lotXY, here, structuresXY).overlapIdx < 0;
+    if (ok) lastValid.current = adu;
+    else { userMoved.current = false; autoPlace(shp); }
   }
 
   const aduLatLng = adu ? projector.toLatLng(adu.x, adu.y) : origin;
   const src = modelSrc(modelId, styleId);
   const styleName = STYLES.find((s) => s.id === styleId).name;
-  const canAct = phase === "ready" && adu && lot;
+  const canAct = phase === "ready" && adu && lot && !isConversion;
+  const nearest = fit && fit.nearestIdx >= 0 ? structures[fit.nearestIdx] : null;
+  const overlapping = fit && fit.overlapIdx >= 0 ? structures[fit.overlapIdx] : null;
+  const structuresLL = useMemo(() => structures.map((s) => ({ ring: s.ring, label: s.label })), [structures]);
 
   return (
     <div className="app">
@@ -192,9 +295,14 @@ export default function App() {
           {phase === "out" && <p className="note warn">{message}</p>}
           {phase === "trace" && (
             <div className="note">
-              <b>Trace your lot.</b> We couldn't pull the property lines for this address automatically. Tap each corner of the lot on the map, then press Done.
+              {traceTarget === "lot" ? (
+                <><b>Trace your lot.</b> We couldn't pull the property lines for this address automatically. Tap each corner of the lot on the map, then press Done.</>
+              ) : (
+                <><b>Outline a building or pool.</b> Tap each corner on the map, then press Done.</>
+              )}
               <div className="trace-actions">
                 <button className="btn btn-light btn-sm" onClick={() => setTrace((t) => t.slice(0, -1))} disabled={!trace.length}>Undo</button>
+                {traceTarget === "structure" && <button className="btn btn-light btn-sm" onClick={cancelTrace}>Cancel</button>}
                 <button className="btn btn-primary btn-sm" onClick={finishTrace} disabled={trace.length < 3}>Done ({trace.length} corners)</button>
               </div>
             </div>
@@ -215,11 +323,13 @@ export default function App() {
                 <div className="model-text">
                   <div className="model-name">{m.name}</div>
                   <div className="model-meta">{m.kind} · {m.sqft.toLocaleString()} sq ft</div>
+                  <div className="model-meta">{heightLabel(m)}</div>
                 </div>
-                <div className="model-dims">{m.widthFt}′×{m.depthFt}′</div>
+                <div className="model-dims">{m.shape === "L" ? `${m.widthFt}′×${m.depthFt}′ L` : `${m.widthFt}′×${m.depthFt}′`}</div>
               </button>
             ))}
           </div>
+          <p className="size-note">Sizes are exterior dimensions; living area is roughly 10% less. Covered porches are extra.</p>
           <p className="model-blurb">{model.blurb}</p>
           <div className="styles" role="group" aria-label="Exterior style">
             {STYLES.map((s) => (
@@ -232,73 +342,103 @@ export default function App() {
 
         <section className="step">
           <div className="step-label"><span>3</span> Place it</div>
-          <p className="hint">Drag the {statusWord(status)} box on the map, or tap a spot on the lot. The white edge is the front door.</p>
-          <div className="rotate-row">
-            <button className="btn btn-light btn-sm" onClick={() => rotate(-15)} disabled={!canAct} aria-label="Rotate left 15 degrees">⟲ 15°</button>
-            <button className="btn btn-light btn-sm" onClick={() => rotate(15)} disabled={!canAct} aria-label="Rotate right 15 degrees">⟳ 15°</button>
-            <button className="btn btn-light btn-sm" onClick={() => rotate(90)} disabled={!canAct}>Turn 90°</button>
-            <button className="btn btn-light btn-sm" onClick={squareToLot} disabled={!canAct}>Square to lot</button>
-          </div>
-          {canAct && fit && (
-            <div className={`fit fit-${status}`}>
-              <div className="fit-title">
-                {status === "bad" ? (fit.inside ? "Too close to the property line" : "Outside the lot") : status === "tight" ? "Fits, but it's snug" : "Fits"}
-              </div>
+          {isConversion ? (
+            <div className="fit fit-info">
+              <div className="fit-title">Converts your existing garage</div>
               <div className="fit-body">
-                {fit.inside
-                  ? `${clearanceFt.toFixed(1)} ft to the closest property line (${MIN_SETBACK_FT} ft minimum).`
-                  : "Drag the ADU fully inside the yellow lot line."}
-              </div>
-              <div className="stats">
-                <div><b>{lotSqft ? Math.round(lotSqft).toLocaleString() : "–"}</b><span>lot sq ft</span></div>
-                <div><b>{model.sqft.toLocaleString()}</b><span>ADU sq ft</span></div>
-                <div><b>{compass(adu.heading)}</b><span>door faces</span></div>
+                {model.name} turns a two-car garage (about {model.widthFt}′×{model.depthFt}′) into a one-bedroom unit, so there's nothing new to place in the yard and no setback check. We confirm the garage's size and condition on the site visit.
               </div>
             </div>
+          ) : (
+            <>
+              <p className="hint">Drag the box on the map, or tap a spot on the lot. The white edge is the front door. It can't cross the property line.</p>
+              <div className="rotate-row">
+                <button className="btn btn-light btn-sm" onClick={() => rotate(-15)} disabled={!canAct} aria-label="Rotate left 15 degrees">⟲ 15°</button>
+                <button className="btn btn-light btn-sm" onClick={() => rotate(15)} disabled={!canAct} aria-label="Rotate right 15 degrees">⟳ 15°</button>
+                <button className="btn btn-light btn-sm" onClick={() => rotate(90)} disabled={!canAct}>Turn 90°</button>
+                <button className="btn btn-light btn-sm" onClick={squareToLot} disabled={!canAct}>Square to lot</button>
+              </div>
+              {canAct && fit && (
+                <div className={`fit fit-${status}`}>
+                  <div className="fit-title">
+                    {!fit.inside ? "Outside the lot"
+                      : overlapping ? `Overlaps the ${overlapping.label.toLowerCase()}`
+                      : status === "tight" ? `Close to the ${nearest.label.toLowerCase()}`
+                      : "Fits"}
+                  </div>
+                  <div className="fit-body">
+                    {!fit.inside ? "It can't cross the property line. Let go and it will snap back inside."
+                      : overlapping ? `It's sitting on top of the existing ${overlapping.label.toLowerCase()}. Drag it to open yard.`
+                      : status === "tight" ? `${fmtFt(fit.nearestM)} from the ${nearest.label.toLowerCase()}. Most cities want about 6–10 ft between an ADU and the main house.`
+                      : nearest ? `${fmtFt(fit.nearestM)} from the ${nearest.label.toLowerCase()} · ${fmtFt(fit.lotClearM)} to the closest property line.`
+                      : `${fmtFt(fit.lotClearM)} to the closest property line.`}
+                  </div>
+                  {!structures.length && site.loaded && (
+                    <div className="fit-body">We couldn't find building outlines for this lot. Make sure it doesn't overlap your house, pool, or garage.</div>
+                  )}
+                  <div className="stats">
+                    <div><b>{lotSqft ? Math.round(lotSqft).toLocaleString() : "–"}</b><span>lot sq ft</span></div>
+                    <div><b>{model.sqft.toLocaleString()}</b><span>ADU sq ft</span></div>
+                    <div><b>{compass(adu.heading)}</b><span>door faces</span></div>
+                  </div>
+                </div>
+              )}
+              {canAct && (
+                <button className="link-btn" onClick={startStructureTrace}>
+                  {structures.length ? "Missing a shed or pool? Outline it" : "Outline your house, garage or pool"}
+                </button>
+              )}
+            </>
           )}
+          {notice && <p className="note warn" role="status">{notice}</p>}
         </section>
 
         <section className="step actions">
           <div className="step-label"><span>4</span> See it and get a quote</div>
           <div className="action-grid">
-            <button className="btn btn-dark" disabled={!canAct || !GOOGLE_KEY || mapsFailed} onClick={() => setShow3D(true)}>View in 3D</button>
+            <button className="btn btn-dark" disabled={!canAct || !GOOGLE_KEY || mapsFailed} onClick={() => setShow3D(true)} title={isConversion ? "Garage conversions use your existing garage" : undefined}>View in 3D</button>
             <button className="btn btn-dark" onClick={() => setShowAR(true)}>See it in your yard</button>
           </div>
           <button className="btn btn-primary btn-block" onClick={() => setShowQuote(true)}>Request a quote</button>
         </section>
 
         <footer className="fine">
-          Setback check uses California's 4-ft side and rear minimum for ADUs. Your city may have extra rules; we confirm them before you build. Property lines from {lot?.source === "traced" ? "your tracing" : `${lot?.county || "county"} County public records`}, for planning only.
+          Building outlines from FEMA's USA Structures data and OpenStreetMap; property lines from {lot?.source === "traced" ? "your tracing" : `${lot?.county || "county"} County public records`}. For planning only. Your city's setback, separation and size rules apply; we confirm them before you build.
         </footer>
       </aside>
 
       <main className="stage">
-        {view === "map" && GOOGLE_KEY && !mapsFailed ? (
+        {GOOGLE_KEY && !mapsFailed && (
           <MapEditor
+            visible={view === "map"}
             projector={projector}
             origin={origin}
             lotRing={lot?.ring}
+            structures={structuresLL}
             adu={adu}
             aduXY={aduXY}
             doorXY={doorXY}
             status={status}
             tracing={phase === "trace"}
             tracePts={trace}
-            onAduMove={({ x, y }) => setAdu((a) => a && { ...a, x, y })}
+            onAduMove={(m) => moveAdu({ ...m, src: "map" })}
             onMapClick={onMapClick}
             onError={() => { setMapsFailed(true); setView("plan"); }}
           />
-        ) : (
+        )}
+        {(view === "plan" || !GOOGLE_KEY || mapsFailed) && (
           <PlanEditor
             projector={projector}
             lotXY={lotXY}
+            structures={structures}
+            streetEdge={streetEdge}
             adu={adu}
             aduXY={aduXY}
             doorXY={doorXY}
             status={status}
             tracing={phase === "trace"}
             traceXY={traceXY}
-            onAduMove={({ x, y }) => setAdu((a) => a && { ...a, x, y })}
+            onAduMove={(m) => moveAdu({ ...m, src: "plan" })}
             onMapClick={onMapClick}
           />
         )}
@@ -313,8 +453,16 @@ export default function App() {
           <div className="stage-note">{mapsFailed ? "Satellite map unavailable: check the Google Maps key. Showing the site plan." : "Site plan view. Satellite imagery and 3D turn on once the Google Maps key is added."}</div>
         )}
 
-        {show3D && adu && (
-          <View3D position={aduLatLng} heading={adu.heading} src={src} onClose={() => setShow3D(false)} />
+        {show3D && adu && aduXY && (
+          <View3D
+            position={aduLatLng}
+            heading={adu.heading}
+            src={src}
+            outline={aduXY.map(([x, y]) => projector.toLatLng(x, y))}
+            heightM={model.heightFt * FT}
+            overlap={overlapping?.label || null}
+            onClose={() => setShow3D(false)}
+          />
         )}
       </main>
 
@@ -326,8 +474,8 @@ export default function App() {
             model: `${model.name} (${model.kind}, ${model.sqft} sq ft)`,
             style: styleName,
             address: place.isDemo ? "Demo lot (Manteca)" : place.label,
-            placement: adu ? `Door faces ${compass(adu.heading)}` : "",
-            clearance: fit?.inside ? `${clearanceFt.toFixed(1)} ft` : "not placed inside lot",
+            placement: isConversion ? "Converts existing garage" : adu ? `Door faces ${compass(adu.heading)}` : "",
+            clearance: isConversion ? "n/a (garage conversion)" : fit?.inside ? `${fmtFt(fit.lotClearM)} to property line${nearest ? `, ${fmtFt(fit.nearestM)} to ${nearest.label.toLowerCase()}` : ""}` : "not placed",
             lat: aduLatLng?.lat,
             lng: aduLatLng?.lng,
           }}
@@ -335,10 +483,6 @@ export default function App() {
       )}
     </div>
   );
-}
-
-function statusWord(s) {
-  return s === "bad" ? "red" : s === "tight" ? "orange" : "green";
 }
 
 // Footprint in meters (for placement/fit) plus the front-door segment.
@@ -350,7 +494,7 @@ function shapeOf(m) {
 }
 
 function FootprintIcon({ model }) {
-  const s = 30 / 42;
+  const s = 30 / 46;
   const pts = footprintFt(model).map(([x, f]) => `${17 + x * s},${17 - f * s}`).join(" ");
   return (
     <svg className="fp" viewBox="0 0 34 34" width="34" height="34" aria-hidden="true">
