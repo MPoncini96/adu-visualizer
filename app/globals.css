@@ -183,3 +183,9 @@ h1 { font-size: 28px; line-height: 1.15; margin: 0 0 6px; }
 .view3d-toggle button { border: 0; background: transparent; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-weight: 500; font-size: 13px; }
 .view3d-toggle button.on { background: var(--green); color: #fff; }
 .small-print { font-size: 12px; color: var(--muted); }
+/* soft fade at the 3D view's edges so the far neighborhood falls away */
+.view3d-fade { position: absolute; inset: 0; pointer-events: none; z-index: 1; background: radial-gradient(ellipse 62% 66% at 50% 48%, rgba(223,227,214,0) 55%, rgba(223,227,214,.75) 82%, rgba(223,227,214,.95) 100%); }
+.start-card { position: absolute; z-index: 4; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(420px, calc(100% - 32px)); background: rgba(251,250,246,.97); border-radius: 16px; padding: 22px 24px; box-shadow: 0 12px 40px rgba(0,0,0,.18); text-align: center; }
+.start-card h2 { margin: 0 0 6px; font-size: 24px; }
+.start-card p { margin: 0 0 14px; color: var(--ink-2); font-size: 14px; }
+.link-btn.inline { margin: 0 0 0 2px; font-size: inherit; }

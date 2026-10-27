@@ -17,6 +17,7 @@ const MapEditor = dynamic(() => import("./MapEditor.jsx"), { ssr: false });
 const View3D = dynamic(() => import("./View3D.jsx"), { ssr: false });
 const ARModal = dynamic(() => import("./ARModal.jsx"), { ssr: false });
 
+const MANTECA = { lat: 37.7974, lng: -121.2161 };
 const HOUSE_GAP_FT = 6; // soft warning below this; 6-10 ft is the usual rule of thumb
 const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 const compass = (deg) => COMPASS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
@@ -26,12 +27,12 @@ export default function App() {
   const [modelId, setModelId] = useState("cherry");
   const [styleId, setStyleId] = useState("cottage");
   const [filter, setFilter] = useState("all");
-  const [place, setPlace] = useState({ label: DEMO_LOT.label });
-  const [lot, setLot] = useState({ ring: DEMO_LOT.ring, source: "county", county: DEMO_LOT.county });
+  const [place, setPlace] = useState(null);
+  const [lot, setLot] = useState(null);
   const [site, setSite] = useState({ structures: [], neighbors: [], loaded: false });
-  const [origin, setOrigin] = useState(() => ringCentroid(DEMO_LOT.ring));
+  const [origin, setOrigin] = useState(MANTECA);
   const [adu, setAdu] = useState(null);
-  const [phase, setPhase] = useState("ready"); // ready | loading | out | trace
+  const [phase, setPhase] = useState("start"); // start | ready | loading | out | trace
   const [traceTarget, setTraceTarget] = useState("lot"); // lot | structure
   const [message, setMessage] = useState("");
   const [notice, setNotice] = useState("");
@@ -70,7 +71,7 @@ export default function App() {
   const streetEdge = useMemo(() => {
     if (!lotXY) return null;
     const neighborsXY = site.neighbors.map((r) => closedOpen(r).map(([lng, lat]) => projector.toXY(lat, lng)));
-    const hint = place.lat ? projector.toXY(place.lat, place.lng) : place.isDemo ? [0, -30] : house ? centroidXY(house.xy) : null;
+    const hint = place?.lat ? projector.toXY(place.lat, place.lng) : house ? centroidXY(house.xy) : null;
     return findStreetEdge(lotXY, neighborsXY, hint);
   }, [lotXY, site.neighbors, house, place, projector]);
   const rear = useMemo(() => {
@@ -104,7 +105,6 @@ export default function App() {
     if (m) setModelId(m.id);
     if (STYLES.some((s) => s.id === q.get("style"))) setStyleId(q.get("style"));
     if (q.get("ar") === "1") setShowAR(true);
-    loadSite(DEMO_LOT.ring);
     const fail = () => { setMapsFailed(true); setView("plan"); };
     window.addEventListener("gmaps-auth-failure", fail);
     return () => window.removeEventListener("gmaps-auth-failure", fail);
@@ -193,6 +193,21 @@ export default function App() {
     setPhase("trace");
   }
 
+  // Example property for demos: 531 Chablis Way, Manteca
+  function loadExample() {
+    setShow3D(false);
+    setMessage("");
+    setTrace([]);
+    userMoved.current = false;
+    setAdu(null);
+    lastValid.current = null;
+    setPlace({ label: DEMO_LOT.label });
+    setOrigin(ringCentroid(DEMO_LOT.ring));
+    setLot({ ring: DEMO_LOT.ring, source: "county", county: DEMO_LOT.county });
+    loadSite(DEMO_LOT.ring);
+    setPhase("ready");
+  }
+
   function onMapClick({ x, y, lat, lng }) {
     if (phase === "trace") {
       if (lat != null) setTrace((t) => [...t, { lat, lng }]);
@@ -264,6 +279,7 @@ export default function App() {
   const src = modelSrc(modelId, styleId);
   const styleName = STYLES.find((s) => s.id === styleId).name;
   const canAct = phase === "ready" && adu && lot && !isConversion;
+  const outlineLL = useMemo(() => (aduXY ? aduXY.map(([x, y]) => projector.toLatLng(x, y)) : null), [aduXY, projector]);
   const nearest = fit && fit.nearestIdx >= 0 ? structures[fit.nearestIdx] : null;
   const overlapping = fit && fit.overlapIdx >= 0 ? structures[fit.overlapIdx] : null;
   const structuresLL = useMemo(() => structures.map((s) => ({ ring: s.ring, label: s.label })), [structures]);
@@ -288,8 +304,9 @@ export default function App() {
           <div className="step-label"><span>1</span> Your property</div>
           <AddressSearch onSelect={selectAddress} />
           <div className="place-line">
-            <span className="pin">●</span> {place.label}
-            {place.isDemo && <span className="chip">Demo</span>}
+            {place ? <><span className="pin">●</span> {place.label}</> : (
+              <>Start with your address. <button className="link-btn inline" onClick={loadExample}>Or try an example property</button></>
+            )}
           </div>
           {phase === "loading" && <p className="note">Finding the property lines…</p>}
           {phase === "out" && <p className="note warn">{message}</p>}
@@ -445,7 +462,14 @@ export default function App() {
           />
         )}
 
-        {GOOGLE_KEY && !mapsFailed && (
+        {!lot && phase !== "trace" && (
+          <div className="start-card">
+            <h2>Start with your address</h2>
+            <p>Type your property address in the search box. We'll pull up your lot lines and existing buildings, then you can try plans in your back yard.</p>
+            <button className="btn btn-light" onClick={loadExample}>Try an example property</button>
+          </div>
+        )}
+        {GOOGLE_KEY && !mapsFailed && lot && (
           <div className="view-toggle" role="group" aria-label="Map view">
             <button className={view === "map" ? "on" : ""} onClick={() => setView("map")}>Satellite</button>
             <button className={view === "plan" ? "on" : ""} onClick={() => setView("plan")}>Site plan</button>
@@ -460,7 +484,8 @@ export default function App() {
             position={aduLatLng}
             heading={adu.heading}
             src={src}
-            outline={aduXY.map(([x, y]) => projector.toLatLng(x, y))}
+            outline={outlineLL}
+            lotRing={lot?.ring}
             heightM={model.heightFt * FT}
             overlap={overlapping?.label || null}
             onClose={() => setShow3D(false)}
@@ -475,7 +500,7 @@ export default function App() {
           summary={{
             model: `${model.name} (${model.kind}, ${model.sqft} sq ft)`,
             style: styleName,
-            address: place.isDemo ? "Demo lot (Manteca)" : place.label,
+            address: place?.label || "Not entered",
             placement: isConversion ? "Converts existing garage" : adu ? `Door faces ${compass(adu.heading)}` : "",
             clearance: isConversion ? "n/a (garage conversion)" : fit?.inside ? `${fmtFt(fit.lotClearM)} to property line${nearest ? `, ${fmtFt(fit.nearestM)} to ${nearest.label.toLowerCase()}` : ""}` : "not placed",
             lat: aduLatLng?.lat,

@@ -21,11 +21,11 @@ function setCoords(el, coords, polygon = false) {
   else el.coordinates = coords;
 }
 
-export default function View3D({ position, heading, src, outline, heightM, overlap, onClose }) {
+export default function View3D({ position, heading, src, outline, lotRing, heightM, overlap, onClose }) {
   const hostRef = useRef(null);
   const els = useRef({});
   const [error, setError] = useState(null);
-  const [mode, setMode] = useState("solid"); // solid | model
+  const [mode, setMode] = useState("model"); // model | solid
   const [hasModel, setHasModel] = useState(false);
 
   useEffect(() => {
@@ -47,11 +47,25 @@ export default function View3D({ position, heading, src, outline, heightM, overl
         // Frame the ADU: ~45 degree tilt, far enough back to see the yard, looking at the front door
         map = new Map3DElement({
           center: { lat: position.lat, lng: position.lng, altitude: groundElev + heightM / 2 },
-          range: 110,
+          range: 65,
           tilt: 45,
           heading: (heading + 180 + 20) % 360,
           mode: "HYBRID",
         });
+
+        // Keep the camera over the lot plus about one house on every side
+        const NEIGHBOR_M = 22;
+        const pts = (lotRing?.length ? lotRing.map(([lng, lat]) => ({ lat, lng })) : outline);
+        const kLat = 111320, kLng = 111320 * Math.cos((position.lat * Math.PI) / 180);
+        map.bounds = {
+          north: Math.max(...pts.map((p) => p.lat)) + NEIGHBOR_M / kLat,
+          south: Math.min(...pts.map((p) => p.lat)) - NEIGHBOR_M / kLat,
+          east: Math.max(...pts.map((p) => p.lng)) + NEIGHBOR_M / kLng,
+          west: Math.min(...pts.map((p) => p.lng)) - NEIGHBOR_M / kLng,
+        };
+        map.minAltitude = groundElev + 4;
+        map.maxAltitude = groundElev + 60;
+        map.maxTilt = 62;
 
         const ring = outline.map((p) => ({ lat: p.lat, lng: p.lng }));
         const closed = [...ring, ring[0]];
@@ -94,18 +108,20 @@ export default function View3D({ position, heading, src, outline, heightM, overl
         map.append(solid, ground, top);
         setHasModel(!!model);
         els.current = { map, solid, model, ground, top };
-        applyMode(els.current, "solid");
+        applyMode(els.current, model ? "model" : "solid");
+        if (!model) setMode("solid");
         hostRef.current.append(map);
       })
       .catch((e) => setError(e.message === "no-key" ? "The 3D view turns on once the Google Maps key is added." : "3D view couldn't load here."));
     return () => { cancelled = true; map?.remove(); };
-  }, [position.lat, position.lng, heading, src, outline, heightM]);
+  }, [position.lat, position.lng, heading, src, outline, lotRing, heightM]);
 
   useEffect(() => { applyMode(els.current, mode); }, [mode]);
 
   return (
     <div className="view3d">
       <div ref={hostRef} className="view3d-host" />
+      <div className="view3d-fade" aria-hidden="true" />
       {error && <div className="view3d-msg">{error}</div>}
       {overlap && <div className="view3d-warn">Heads up: the ADU overlaps the existing {overlap.toLowerCase()}.</div>}
       <div className="view3d-toggle" role="group" aria-label="3D display">

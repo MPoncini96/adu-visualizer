@@ -40,7 +40,7 @@ export default function MapEditor({ visible = true, projector, origin, lotRing, 
         const { Map, Polygon, Polyline } = await google.maps.importLibrary("maps");
         const map = new Map(divRef.current, {
           center: origin,
-          zoom: 20,
+          zoom: lotRing?.length || tracing ? 20 : 13,
           mapTypeId: "satellite",
           tilt: 0,
           heading: 0,
@@ -148,12 +148,12 @@ export default function MapEditor({ visible = true, projector, origin, lotRing, 
   useEffect(() => {
     const { map } = g.current;
     // With a lot loaded, the fit-to-lot effect handles framing; this is for tracing a new lot
-    if (map && origin && !lotRing?.length) { map.panTo(origin); map.setZoom(20); }
+    if (map && origin && !lotRing?.length) { map.panTo(origin); map.setZoom(tracing ? 20 : 13); }
     const el = divRef.current;
     const onReady = () => { if (!lotRing?.length) g.current.map?.setCenter(origin); };
     el?.addEventListener("gmaps-ready", onReady);
     return () => el?.removeEventListener("gmaps-ready", onReady);
-  }, [origin?.lat, origin?.lng]);
+  }, [origin?.lat, origin?.lng, tracing]);
 
   return (
     <div
