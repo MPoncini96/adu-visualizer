@@ -1,9 +1,9 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { MODELS, STYLES, modelSrc } from "../lib/models.js";
+import { MODELS, STYLES, FILTERS, modelSrc, footprintFt, doorFt } from "../lib/models.js";
 import { DEMO_LOT } from "../lib/demo.js";
-import { FT, makeProjector, ringCentroid, closedOpen, areaM2, aduCornersXY, checkFit, suggestPlacement } from "../lib/geo.js";
+import { FT, makeProjector, ringCentroid, closedOpen, areaM2, placeXY, checkFit, suggestPlacement } from "../lib/geo.js";
 import { inServiceArea, milesFromHwy99, MAX_MILES } from "../lib/serviceArea.js";
 import { GOOGLE_KEY } from "../lib/googleMaps.js";
 import PlanEditor from "./PlanEditor.jsx";
@@ -19,8 +19,9 @@ const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 const compass = (deg) => COMPASS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
 
 export default function App() {
-  const [modelId, setModelId] = useState("one-bed");
-  const [styleId, setStyleId] = useState("farmhouse");
+  const [modelId, setModelId] = useState("ripon");
+  const [styleId, setStyleId] = useState("cottage");
+  const [filter, setFilter] = useState("all");
   const [place, setPlace] = useState({ label: DEMO_LOT.label, isDemo: true });
   const [lot, setLot] = useState({ ring: DEMO_LOT.ring, source: "county", county: DEMO_LOT.county });
   const [origin, setOrigin] = useState(() => ringCentroid(DEMO_LOT.ring));
@@ -35,7 +36,7 @@ export default function App() {
   const [showQuote, setShowQuote] = useState(false);
 
   const model = MODELS.find((m) => m.id === modelId);
-  const dims = useMemo(() => ({ w: model.widthFt * FT, d: model.depthFt * FT }), [model]);
+  const shape = useMemo(() => shapeOf(model), [model]);
   const projector = useMemo(() => makeProjector(origin), [origin]);
   const lotXY = useMemo(() => (lot ? closedOpen(lot.ring).map(([lng, lat]) => projector.toXY(lat, lng)) : null), [lot, projector]);
   const traceXY = useMemo(() => trace.map((p) => projector.toXY(p.lat, p.lng)), [trace, projector]);
@@ -52,22 +53,21 @@ export default function App() {
   }, []);
 
   // Place the ADU whenever a new lot arrives
-  const placeOnLot = useCallback((xy, d, housePointXY) => {
-    const s = suggestPlacement(xy, d.w, d.d, housePointXY, MIN_SETBACK_FT * FT + 0.3);
+  const placeOnLot = useCallback((xy, shp, housePointXY) => {
+    const s = suggestPlacement(xy, shp.pts, housePointXY, MIN_SETBACK_FT * FT + 0.3);
     setAdu({ x: s.x, y: s.y, heading: s.heading });
   }, []);
 
   useEffect(() => {
     if (lotXY && !adu) {
       // Demo lot: house sits toward the street on the south end (Wawona St), so the ADU goes in back.
-      placeOnLot(lotXY, dims, place.isDemo ? [0, -30] : null);
+      placeOnLot(lotXY, shape, place.isDemo ? [0, -30] : null);
     }
-  }, [lotXY, adu, dims, place.isDemo, placeOnLot]);
+  }, [lotXY, adu, shape, place.isDemo, placeOnLot]);
 
-  const fit = useMemo(() => {
-    if (!lotXY || !adu) return null;
-    return checkFit(lotXY, aduCornersXY(adu.x, adu.y, dims.w, dims.d, adu.heading));
-  }, [lotXY, adu, dims]);
+  const aduXY = useMemo(() => (adu ? placeXY(shape.pts, adu.x, adu.y, adu.heading) : null), [adu, shape]);
+  const doorXY = useMemo(() => (adu ? placeXY(shape.door, adu.x, adu.y, adu.heading) : null), [adu, shape]);
+  const fit = useMemo(() => (lotXY && aduXY ? checkFit(lotXY, aduXY) : null), [lotXY, aduXY]);
   const clearanceFt = fit ? fit.clearanceM / FT : 0;
   const status = !fit ? "ok" : !fit.inside || clearanceFt < MIN_SETBACK_FT ? "bad" : clearanceFt < 6 ? "tight" : "ok";
   const lotSqft = lotXY ? areaM2(lotXY) / (FT * FT) : null;
@@ -94,7 +94,7 @@ export default function App() {
         const xy = closedOpen(ring).map(([x, y]) => proj.toXY(y, x));
         setOrigin(o);
         setLot({ ring, source: "county", county: data.parcel.county });
-        placeOnLot(xy, dims, proj.toXY(lat, lng));
+        placeOnLot(xy, shape, proj.toXY(lat, lng));
         setPhase("ready");
       } else {
         setOrigin({ lat, lng });
@@ -126,7 +126,7 @@ export default function App() {
     const xy = ring.map(([x, y]) => proj.toXY(y, x));
     setOrigin(o);
     setLot({ ring, source: "traced" });
-    placeOnLot(xy, dims, place.lat ? proj.toXY(place.lat, place.lng) : null);
+    placeOnLot(xy, shape, place.lat ? proj.toXY(place.lat, place.lng) : null);
     setTrace([]);
     setPhase("ready");
   }
@@ -135,8 +135,8 @@ export default function App() {
   function chooseModel(m) {
     setModelId(m.id);
     if (!lotXY || !adu) return;
-    const d = { w: m.widthFt * FT, d: m.depthFt * FT };
-    const f = checkFit(lotXY, aduCornersXY(adu.x, adu.y, d.w, d.d, adu.heading));
+    const d = shapeOf(m);
+    const f = checkFit(lotXY, placeXY(d.pts, adu.x, adu.y, adu.heading));
     if (!f.inside || f.clearanceM < MIN_SETBACK_FT * FT) {
       placeOnLot(lotXY, d, place.isDemo ? [0, -30] : place.lat ? projector.toXY(place.lat, place.lng) : null);
     }
@@ -203,10 +203,15 @@ export default function App() {
 
         <section className="step">
           <div className="step-label"><span>2</span> Choose a plan</div>
+          <div className="chips" role="group" aria-label="Filter plans">
+            {FILTERS.map((f) => (
+              <button key={f.id} className={`chip-btn ${f.id === filter ? "on" : ""}`} onClick={() => setFilter(f.id)} aria-pressed={f.id === filter}>{f.name}</button>
+            ))}
+          </div>
           <div className="models">
-            {MODELS.map((m) => (
+            {MODELS.filter(FILTERS.find((f) => f.id === filter).test).map((m) => (
               <button key={m.id} className={`model-card ${m.id === modelId ? "active" : ""}`} onClick={() => chooseModel(m)} aria-pressed={m.id === modelId}>
-                <FootprintIcon w={m.widthFt} d={m.depthFt} />
+                <FootprintIcon model={m} />
                 <div className="model-text">
                   <div className="model-name">{m.name}</div>
                   <div className="model-meta">{m.kind} · {m.sqft.toLocaleString()} sq ft</div>
@@ -216,9 +221,11 @@ export default function App() {
             ))}
           </div>
           <p className="model-blurb">{model.blurb}</p>
-          <div className="seg" role="group" aria-label="Exterior style">
+          <div className="styles" role="group" aria-label="Exterior style">
             {STYLES.map((s) => (
-              <button key={s.id} className={s.id === styleId ? "on" : ""} onClick={() => setStyleId(s.id)} aria-pressed={s.id === styleId}>{s.name}</button>
+              <button key={s.id} className={`style-btn ${s.id === styleId ? "on" : ""}`} onClick={() => setStyleId(s.id)} aria-pressed={s.id === styleId}>
+                <span className="swatch" style={{ background: s.swatch }} />{s.name}
+              </button>
             ))}
           </div>
         </section>
@@ -272,7 +279,8 @@ export default function App() {
             origin={origin}
             lotRing={lot?.ring}
             adu={adu}
-            dims={dims}
+            aduXY={aduXY}
+            doorXY={doorXY}
             status={status}
             tracing={phase === "trace"}
             tracePts={trace}
@@ -285,7 +293,8 @@ export default function App() {
             projector={projector}
             lotXY={lotXY}
             adu={adu}
-            dims={dims}
+            aduXY={aduXY}
+            doorXY={doorXY}
             status={status}
             tracing={phase === "trace"}
             traceXY={traceXY}
@@ -332,11 +341,20 @@ function statusWord(s) {
   return s === "bad" ? "red" : s === "tight" ? "orange" : "green";
 }
 
-function FootprintIcon({ w, d }) {
-  const s = 30 / 40;
+// Footprint in meters (for placement/fit) plus the front-door segment.
+function shapeOf(m) {
+  const pts = footprintFt(m).map(([x, f]) => [x * FT, f * FT]);
+  const d = doorFt(m);
+  const door = [[(d.x - d.w / 2) * FT, d.f * FT], [(d.x + d.w / 2) * FT, d.f * FT]];
+  return { pts, door };
+}
+
+function FootprintIcon({ model }) {
+  const s = 30 / 42;
+  const pts = footprintFt(model).map(([x, f]) => `${17 + x * s},${17 - f * s}`).join(" ");
   return (
     <svg className="fp" viewBox="0 0 34 34" width="34" height="34" aria-hidden="true">
-      <rect x={17 - (w * s) / 2} y={17 - (d * s) / 2} width={w * s} height={d * s} rx="1.5" />
+      <polygon points={pts} strokeLinejoin="round" />
     </svg>
   );
 }

@@ -2,17 +2,17 @@
 // Site-plan view (no map imagery). Used when no Google key is configured, and as a
 // clean "plan" toggle. Same behaviour as the map: drag the ADU, click to place or trace.
 import { useMemo, useRef, useState } from "react";
-import { aduCornersXY, FT } from "../lib/geo.js";
+import { FT } from "../lib/geo.js";
 
 const FIT_COLORS = { ok: "#2fbf71", tight: "#f2a93b", bad: "#e5484d" };
 
-export default function PlanEditor({ lotXY, adu, dims, status, tracing, traceXY, onAduMove, onMapClick, projector }) {
+export default function PlanEditor({ lotXY, adu, aduXY, doorXY, status, tracing, traceXY, onAduMove, onMapClick, projector }) {
   const svgRef = useRef(null);
   const [drag, setDrag] = useState(null);
 
   const box = useMemo(() => {
     const pts = [...(lotXY || []), ...(traceXY || [])];
-    if (adu && dims) pts.push(...aduCornersXY(adu.x, adu.y, dims.w, dims.d, adu.heading));
+    if (aduXY) pts.push(...aduXY);
     if (!pts.length) pts.push([-20, -20], [20, 20]);
     const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
     const pad = 8;
@@ -33,7 +33,7 @@ export default function PlanEditor({ lotXY, adu, dims, status, tracing, traceXY,
     return [p.x, -p.y];
   };
 
-  const corners = adu && dims ? aduCornersXY(adu.x, adu.y, dims.w, dims.d, adu.heading) : null;
+  const corners = aduXY;
   const pts = (arr) => arr.map(([x, y]) => `${x},${-y}`).join(" ");
   const grid = [];
   const step = 5;
@@ -93,12 +93,7 @@ export default function PlanEditor({ lotXY, adu, dims, status, tracing, traceXY,
               setDrag({ dx: x - adu.x, dy: y - adu.y });
             }}
           />
-          {(() => {
-            const [fl, fr] = corners;
-            const a = [fl[0] + (fr[0] - fl[0]) / 3, fl[1] + (fr[1] - fl[1]) / 3];
-            const b = [fl[0] + (2 * (fr[0] - fl[0])) / 3, fl[1] + (2 * (fr[1] - fl[1])) / 3];
-            return <line x1={a[0]} y1={-a[1]} x2={b[0]} y2={-b[1]} stroke="#fff" strokeWidth={0.6} pointerEvents="none" />;
-          })()}
+          {doorXY && <line x1={doorXY[0][0]} y1={-doorXY[0][1]} x2={doorXY[1][0]} y2={-doorXY[1][1]} stroke="#fff" strokeWidth={0.6} strokeLinecap="round" pointerEvents="none" />}
         </g>
       )}
       {/* scale bar: 20 ft */}

@@ -2,16 +2,16 @@
 // Google satellite map with the lot outline and a draggable ADU footprint.
 import { useEffect, useRef } from "react";
 import { loadGoogleMaps } from "../lib/googleMaps.js";
-import { aduCornersXY } from "../lib/geo.js";
 
 const FIT_COLORS = { ok: "#2fbf71", tight: "#f2a93b", bad: "#e5484d" };
 
-export default function MapEditor({ projector, origin, lotRing, adu, dims, status, tracing, tracePts, onAduMove, onMapClick, onError }) {
+export default function MapEditor({ projector, origin, lotRing, adu, aduXY, doorXY, status, tracing, tracePts, onAduMove, onMapClick, onError }) {
   const divRef = useRef(null);
   const g = useRef({}); // google objects
   const dragging = useRef(false);
   const cb = useRef({});
-  cb.current = { onAduMove, onMapClick, projector };
+  cb.current = { onAduMove, onMapClick, projector, adu };
+  const dragStart = useRef(null);
 
   // Create the map once
   useEffect(() => {
@@ -36,13 +36,23 @@ export default function MapEditor({ projector, origin, lotRing, adu, dims, statu
         const door = new Polyline({ map, clickable: false, strokeColor: "#ffffff", strokeWeight: 7, zIndex: 4 });
         const trace = new Polyline({ map, clickable: false, strokeColor: "#ffd84d", strokeWeight: 3, zIndex: 2, icons: [] });
 
-        const centerOfPath = () => {
+        // Average of the path's vertices; we move the ADU by how much this average moves.
+        const avgOfPath = () => {
           const path = aduPoly.getPath().getArray();
           const lat = path.reduce((s, p) => s + p.lat(), 0) / path.length;
           const lng = path.reduce((s, p) => s + p.lng(), 0) / path.length;
           return cb.current.projector.toXY(lat, lng);
         };
-        aduPoly.addListener("dragstart", () => (dragging.current = true));
+        const centerOfPath = () => {
+          const [ax, ay] = avgOfPath();
+          const st = dragStart.current;
+          return st ? [st.cx + ax - st.ax, st.cy + ay - st.ay] : [ax, ay];
+        };
+        aduPoly.addListener("dragstart", () => {
+          dragging.current = true;
+          const [ax, ay] = avgOfPath();
+          dragStart.current = { ax, ay, cx: cb.current.adu.x, cy: cb.current.adu.y };
+        });
         aduPoly.addListener("drag", () => {
           const [x, y] = centerOfPath();
           cb.current.onAduMove({ x, y, live: true });
@@ -50,6 +60,7 @@ export default function MapEditor({ projector, origin, lotRing, adu, dims, statu
         aduPoly.addListener("dragend", () => {
           dragging.current = false;
           const [x, y] = centerOfPath();
+          dragStart.current = null;
           cb.current.onAduMove({ x, y });
         });
         map.addListener("click", (e) => {
@@ -71,24 +82,18 @@ export default function MapEditor({ projector, origin, lotRing, adu, dims, statu
       if (!map) return;
       lot.setPath((lotRing || []).map(([lng, lat]) => ({ lat, lng })));
       trace.setPath((tracePts || []).map(({ lat, lng }) => ({ lat, lng })));
-      if (adu && dims && projector) {
-        const c = aduCornersXY(adu.x, adu.y, dims.w, dims.d, adu.heading);
-        const ll = c.map(([x, y]) => projector.toLatLng(x, y));
-        if (!dragging.current) aduPoly.setPath(ll);
+      if (aduXY && projector) {
+        if (!dragging.current) aduPoly.setPath(aduXY.map(([x, y]) => projector.toLatLng(x, y)));
         aduPoly.setOptions({ fillColor: FIT_COLORS[status] || FIT_COLORS.ok, visible: !tracing });
-        // door marker: middle third of the front edge
-        const [fl, fr] = c;
-        const a = [fl[0] + (fr[0] - fl[0]) / 3, fl[1] + (fr[1] - fl[1]) / 3];
-        const b = [fl[0] + (2 * (fr[0] - fl[0])) / 3, fl[1] + (2 * (fr[1] - fl[1])) / 3];
-        door.setPath([projector.toLatLng(...a), projector.toLatLng(...b)]);
-        door.setVisible(!tracing);
+        door.setPath(doorXY.map(([x, y]) => projector.toLatLng(x, y)));
+        door.setVisible(!tracing && !dragging.current);
       }
     };
     sync();
     const el = divRef.current;
     el?.addEventListener("gmaps-ready", sync);
     return () => el?.removeEventListener("gmaps-ready", sync);
-  }, [lotRing, adu, dims, status, projector, tracing, tracePts]);
+  }, [lotRing, aduXY, doorXY, status, projector, tracing, tracePts]);
 
   // Re-center when the location changes
   useEffect(() => {

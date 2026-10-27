@@ -2,6 +2,7 @@
 // 3D model preview + "see it in your yard" AR (Android Scene Viewer / WebXR, iOS Quick Look).
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
+import { STYLES } from "../lib/models.js";
 
 export default function ARModal({ model, style, src, onClose }) {
   const [ready, setReady] = useState(false);
@@ -25,7 +26,7 @@ export default function ARModal({ model, style, src, onClose }) {
         <div className="modal-head">
           <div>
             <h2>{model.name}</h2>
-            <p className="muted">{model.kind} · {model.sqft.toLocaleString()} sq ft · {style === "farmhouse" ? "Farmhouse" : "Modern"}</p>
+            <p className="muted">{model.kind} · {model.sqft.toLocaleString()} sq ft · {STYLES.find((s) => s.id === style)?.name}</p>
           </div>
           <button className="icon-btn" onClick={onClose} aria-label="Close">×</button>
         </div>
