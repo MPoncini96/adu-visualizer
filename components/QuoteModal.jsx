@@ -31,7 +31,7 @@ export default function QuoteModal({ summary, onClose }) {
         <div className="modal-head">
           <div>
             <h2>Request a quote</h2>
-            <p className="muted">{summary.model} · {summary.style}{summary.address ? ` · ${summary.address}` : ""}</p>
+            <p className="muted">{[summary.model, summary.style, summary.address].filter(Boolean).join(" · ")}</p>
           </div>
           <button className="icon-btn" onClick={onClose} aria-label="Close">×</button>
         </div>
@@ -40,7 +40,7 @@ export default function QuoteModal({ summary, onClose }) {
             <div className="done-check">✓</div>
             <h3>Thanks, we got it.</h3>
             <p>A member of the team will reach out within one business day to talk through your lot and next steps.</p>
-            <button className="btn btn-primary" onClick={onClose}>Back to my design</button>
+            <button className="btn btn-primary" onClick={onClose}>{summary.backLabel || "Back to my design"}</button>
           </div>
         ) : (
           <form onSubmit={submit} className="quote-form">
@@ -55,7 +55,7 @@ export default function QuoteModal({ summary, onClose }) {
             <input name="website" tabIndex={-1} autoComplete="off" className="hp" aria-hidden="true" />
             {error && <p className="form-error">{error}</p>}
             <button className="btn btn-primary btn-block" disabled={state === "sending"}>
-              {state === "sending" ? "Sending…" : "Send my design"}
+              {state === "sending" ? "Sending…" : summary.sendLabel || "Send my design"}
             </button>
             <p className="muted small">Your design, placement and contact details go to the builder only.</p>
           </form>

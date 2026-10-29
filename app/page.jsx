@@ -1,5 +1,5 @@
-import App from "../components/App.jsx";
+import Landing from "../components/Landing.jsx";
 
 export default function Page() {
-  return <App />;
+  return <Landing />;
 }

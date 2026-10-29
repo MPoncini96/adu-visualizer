@@ -16,6 +16,7 @@ import QuoteModal from "./QuoteModal.jsx";
 const MapEditor = dynamic(() => import("./MapEditor.jsx"), { ssr: false });
 const View3D = dynamic(() => import("./View3D.jsx"), { ssr: false });
 const ARModal = dynamic(() => import("./ARModal.jsx"), { ssr: false });
+const InteriorTour = dynamic(() => import("./InteriorTour.jsx"), { ssr: false });
 
 const MANTECA = { lat: 37.7974, lng: -121.2161 };
 const HOUSE_GAP_FT = 6; // soft warning below this; 6-10 ft is the usual rule of thumb
@@ -40,7 +41,8 @@ export default function App() {
   const [view, setView] = useState(GOOGLE_KEY ? "map" : "plan");
   const [mapsFailed, setMapsFailed] = useState(false);
   const [show3D, setShow3D] = useState(false);
-  const [showAR, setShowAR] = useState(false);
+  const [showAR, setShowAR] = useState(false); // false | "outside" | "walkin"
+  const [showTour, setShowTour] = useState(false);
   const [showQuote, setShowQuote] = useState(false);
   const lastValid = useRef(null);
   const userMoved = useRef(false);
@@ -104,7 +106,8 @@ export default function App() {
     const m = findModel(q.get("model"));
     if (m) setModelId(m.id);
     if (STYLES.some((s) => s.id === q.get("style"))) setStyleId(q.get("style"));
-    if (q.get("ar") === "1") setShowAR(true);
+    if (q.get("ar") === "1") setShowAR(q.get("walk") === "1" ? "walkin" : "outside");
+    if (q.get("tour") === "1") setShowTour(true);
     const fail = () => { setMapsFailed(true); setView("plan"); };
     window.addEventListener("gmaps-auth-failure", fail);
     return () => window.removeEventListener("gmaps-auth-failure", fail);
@@ -287,17 +290,8 @@ export default function App() {
   return (
     <div className="app">
       <aside className="panel">
-        <header className="brand">
-          <div className="logo" aria-hidden="true">
-            <svg viewBox="0 0 32 32" width="30" height="30"><path d="M4 16 16 6l12 10v11H4z" fill="#2f6b4f" /><path d="M11 27v-7h10v7" fill="#f6f3ec" /><path d="M2 16.5 16 5l14 11.5" stroke="#c4683a" strokeWidth="2.4" fill="none" strokeLinecap="round" /></svg>
-          </div>
-          <div>
-            <div className="brand-name">Valley ADU Studio</div>
-            <div className="brand-tag">Lodi to Fresno · along Highway 99</div>
-          </div>
-        </header>
 
-        <h1>See an ADU on your lot</h1>
+        <h1>Plan an ADU on your lot</h1>
         <p className="lede">Pick a plan, drag it into your backyard, and check that it fits, before anyone comes out.</p>
 
         <section className="step">
@@ -335,15 +329,18 @@ export default function App() {
           </div>
           <div className="models">
             {MODELS.filter(FILTERS.find((f) => f.id === filter).test).map((m) => (
-              <button key={m.id} className={`model-card ${m.id === modelId ? "active" : ""}`} onClick={() => chooseModel(m)} aria-pressed={m.id === modelId}>
-                <FootprintIcon model={m} />
-                <div className="model-text">
-                  <div className="model-name">{m.name}</div>
-                  <div className="model-meta">{m.kind} · {m.sqft.toLocaleString()} sq ft</div>
-                  <div className="model-meta">{heightLabel(m)}</div>
-                </div>
-                <div className="model-dims">{m.shape === "L" ? `${m.widthFt}′×${m.depthFt}′ L` : `${m.widthFt}′×${m.depthFt}′`}</div>
-              </button>
+              <div key={m.id} className="model-row">
+                <button className={`model-card ${m.id === modelId ? "active" : ""}`} onClick={() => chooseModel(m)} aria-pressed={m.id === modelId}>
+                  <FootprintIcon model={m} />
+                  <div className="model-text">
+                    <div className="model-name">{m.name}</div>
+                    <div className="model-meta">{m.kind} · {m.sqft.toLocaleString()} sq ft</div>
+                    <div className="model-meta">{heightLabel(m)}</div>
+                  </div>
+                  <div className="model-dims">{m.shape === "L" ? `${m.widthFt}′×${m.depthFt}′ L` : `${m.widthFt}′×${m.depthFt}′`}</div>
+                </button>
+                <button className="walk-btn" onClick={() => { chooseModel(m); setShowTour(true); }} aria-label={`Walk inside ${m.name}`}>Walk inside</button>
+              </div>
             ))}
           </div>
           <p className="size-note">Sizes are exterior dimensions; living area is roughly 10% less. Covered porches are extra.</p>
@@ -414,9 +411,10 @@ export default function App() {
 
         <section className="step actions">
           <div className="step-label"><span>4</span> See it and get a quote</div>
-          <div className="action-grid">
+          <div className="action-grid three">
             <button className="btn btn-dark" disabled={!canAct || !GOOGLE_KEY || mapsFailed} onClick={() => setShow3D(true)} title={isConversion ? "Garage conversions use your existing garage" : undefined}>View in 3D</button>
-            <button className="btn btn-dark" onClick={() => setShowAR(true)}>See it in your yard</button>
+            <button className="btn btn-dark" onClick={() => setShowTour(true)}>Walk inside</button>
+            <button className="btn btn-dark" onClick={() => setShowAR("outside")}>See it in your yard</button>
           </div>
           <button className="btn btn-primary btn-block" onClick={() => setShowQuote(true)}>Request a quote</button>
         </section>
@@ -493,7 +491,17 @@ export default function App() {
         )}
       </main>
 
-      {showAR && <ARModal model={model} style={styleId} src={src} onClose={() => setShowAR(false)} />}
+      {showAR && <ARModal model={model} style={styleId} src={src} walkIn={showAR === "walkin"} onMode={(w) => setShowAR(w ? "walkin" : "outside")} onClose={() => setShowAR(false)} />}
+      {showTour && (
+        <InteriorTour
+          model={model}
+          styleId={styleId}
+          heading={adu && !isConversion ? adu.heading : 180}
+          onStyle={setStyleId}
+          onClose={() => setShowTour(false)}
+          onAR={() => { setShowTour(false); setShowAR("walkin"); }}
+        />
+      )}
       {showQuote && (
         <QuoteModal
           onClose={() => setShowQuote(false)}

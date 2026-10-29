@@ -1,0 +1,47 @@
+warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/globals.css', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'components/ARModal.jsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'components/App.jsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/models.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'package-lock.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/build-models.mjs', LF will be replaced by CRLF the next time Git touches it
+ .gitignore                            |   1 [32m+[m
+ app/globals.css                       |  63 [32m++++++++++++++[m
+ components/ARModal.jsx                |  55 [32m+++++++++[m[31m---[m
+ components/App.jsx                    |  45 [32m+++++++[m[31m---[m
+ lib/models.js                         |   2 [32m+[m[31m-[m
+ package-lock.json                     |   6 [32m+[m[31m-[m
+ package.json                          |   3 [32m+[m[31m-[m
+ public/models/almond-cottage.glb      | Bin [31m78156[m -> [32m169792[m bytes
+ public/models/almond-craftsman.glb    | Bin [31m117024[m -> [32m171928[m bytes
+ public/models/almond-sage.glb         | Bin [31m114156[m -> [32m167624[m bytes
+ public/models/apricot-cottage.glb     | Bin [31m63112[m -> [32m117552[m bytes
+ public/models/apricot-craftsman.glb   | Bin [31m73168[m -> [32m104564[m bytes
+ public/models/apricot-sage.glb        | Bin [31m70304[m -> [32m100980[m bytes
+ public/models/cherry-cottage.glb      | Bin [31m68860[m -> [32m127264[m bytes
+ public/models/cherry-craftsman.glb    | Bin [31m84676[m -> [32m118596[m bytes
+ public/models/cherry-sage.glb         | Bin [31m81812[m -> [32m115016[m bytes
+ public/models/fig-cottage.glb         | Bin [31m67396[m -> [32m122920[m bytes
+ public/models/fig-craftsman.glb       | Bin [31m81772[m -> [32m115696[m bytes
+ public/models/fig-sage.glb            | Bin [31m78912[m -> [32m112112[m bytes
+ public/models/olive-cottage.glb       | Bin [31m95260[m -> [32m195060[m bytes
+ public/models/olive-craftsman.glb     | Bin [31m117560[m -> [32m183516[m bytes
+ public/models/olive-sage.glb          | Bin [31m113256[m -> [32m178496[m bytes
+ public/models/peach-cottage.glb       | Bin [31m68860[m -> [32m136264[m bytes
+ public/models/peach-craftsman.glb     | Bin [31m91876[m -> [32m134800[m bytes
+ public/models/peach-sage.glb          | Bin [31m89016[m -> [32m131216[m bytes
+ public/models/pistachio-cottage.glb   | Bin [31m98148[m -> [32m194348[m bytes
+ public/models/pistachio-craftsman.glb | Bin [31m131244[m -> [32m190720[m bytes
+ public/models/pistachio-sage.glb      | Bin [31m126944[m -> [32m185700[m bytes
+ public/models/plum-cottage.glb        | Bin [31m92356[m -> [32m175600[m bytes
+ public/models/plum-craftsman.glb      | Bin [31m103856[m -> [32m153256[m bytes
+ public/models/plum-sage.glb           | Bin [31m99552[m -> [32m148236[m bytes
+ public/models/pocket-cottage.glb      | Bin [31m63116[m -> [32m117560[m bytes
+ public/models/pocket-craftsman.glb    | Bin [31m65972[m -> [32m98088[m bytes
+ public/models/pocket-sage.glb         | Bin [31m63108[m -> [32m94508[m bytes
+ public/models/walnut-cottage.glb      | Bin [31m75288[m -> [32m160812[m bytes
+ public/models/walnut-craftsman.glb    | Bin [31m104064[m -> [32m156468[m bytes
+ public/models/walnut-sage.glb         | Bin [31m101200[m -> [32m152164[m bytes
+ scripts/build-models.mjs              | 158 [32m+++++++++++++++++++++[m[31m-------------[m
+ 38 files changed, 242 insertions(+), 91 deletions(-)

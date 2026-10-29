@@ -2,8 +2,13 @@
 // Units are meters, Y is up, the front door faces +Z, origin = footprint center at ground level.
 // Run: npm run models
 import { Document, NodeIO } from "@gltf-transform/core";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { MODELS, STYLES, geometryFt, ROOF } from "../lib/models.js";
+import { outline, exteriorOpenings, planToModelFrame, FLOOR_FT } from "../lib/floorplan.js";
+
+// Windows and doors come from the same floor plans the walk-in tour uses (lib/floorplans/*.json)
+const planFor = (id) => JSON.parse(readFileSync(new URL(`../lib/floorplans/${id}.json`, import.meta.url)));
+const FLOOR = FLOOR_FT * 0.3048; // finished floor height (m), level with the porch slab
 
 const FT = 0.3048;
 const EAVE = ROOF.eaveFt * FT; // top of wall
@@ -15,15 +20,15 @@ const WHITE = [0.95, 0.95, 0.93];
 const PALETTES = {
   cottage: {
     siding: "lap", wall: [0.42, 0.46, 0.52], base: [0.55, 0.55, 0.53], roof: [0.2, 0.21, 0.23],
-    trim: WHITE, door: WHITE, glass: [0.11, 0.15, 0.19], porch: [0.72, 0.71, 0.68], frame: [0.09, 0.09, 0.09],
+    trim: WHITE, door: WHITE, glass: [0.11, 0.15, 0.19], lite: [0.11, 0.15, 0.19], porch: [0.72, 0.71, 0.68], frame: [0.09, 0.09, 0.09],
   },
   sage: {
     siding: "bb", wall: [0.52, 0.57, 0.4], base: [0.26, 0.3, 0.23], roof: [0.28, 0.28, 0.29],
-    trim: WHITE, door: WHITE, glass: [0.11, 0.15, 0.19], porch: [0.72, 0.71, 0.68], frame: [0.09, 0.09, 0.09],
+    trim: WHITE, door: WHITE, glass: [0.11, 0.15, 0.19], lite: [0.11, 0.15, 0.19], porch: [0.72, 0.71, 0.68], frame: [0.09, 0.09, 0.09],
   },
   craftsman: {
     siding: "bb", wall: [0.74, 0.68, 0.54], base: [0.52, 0.27, 0.19], roof: [0.31, 0.29, 0.27], wainscot: 0.75,
-    trim: WHITE, door: [0.36, 0.25, 0.17], glass: [0.11, 0.15, 0.19], porch: [0.72, 0.71, 0.68], frame: [0.09, 0.09, 0.09],
+    trim: WHITE, door: [0.36, 0.25, 0.17], glass: [0.11, 0.15, 0.19], lite: [0.11, 0.15, 0.19], porch: [0.72, 0.71, 0.68], frame: [0.09, 0.09, 0.09],
   },
 };
 
@@ -94,70 +99,102 @@ function onEdge(mb, mat, e, t0, t1, y0, y1, o0, o1) {
   mb.box(mat, p[0], q[0], y0, y1, p[1], q[1]);
 }
 
-function walls(mb, pal, body) {
+// Rectangles covering [t0,t1] x [y0,y1] minus the openings [{t0,t1,y0,y1}]
+function piecesAround(t0, t1, y0, y1, ops) {
+  const hit = ops.filter((o) => o.t1 > t0 && o.t0 < t1 && o.y1 > y0 && o.y0 < y1);
+  if (!hit.length) return [[t0, t1, y0, y1]];
+  const ts = [...new Set([t0, t1, ...hit.flatMap((o) => [o.t0, o.t1]).filter((v) => v > t0 && v < t1)])].sort((a, b) => a - b);
+  const ys = [...new Set([y0, y1, ...hit.flatMap((o) => [o.y0, o.y1]).filter((v) => v > y0 && v < y1)])].sort((a, b) => a - b);
+  const out = [];
+  for (let i = 0; i < ts.length - 1; i++) {
+    for (let j = 0; j < ys.length - 1; j++) {
+      const tm = (ts[i] + ts[i + 1]) / 2, ym = (ys[j] + ys[j + 1]) / 2;
+      if (hit.some((o) => tm > o.t0 && tm < o.t1 && ym > o.y0 && ym < o.y1)) continue;
+      // merge with the cell below when it is the same column
+      const prev = out[out.length - 1];
+      if (prev && prev[0] === ts[i] && prev[1] === ts[i + 1] && prev[3] === ys[j]) prev[3] = ys[j + 1];
+      else out.push([ts[i], ts[i + 1], ys[j], ys[j + 1]]);
+    }
+  }
+  return out;
+}
+
+function walls(mb, pal, edges) {
   const baseH = pal.wainscot ?? 0.3;
-  for (let i = 0; i < body.length; i++) {
-    const e = edgeOf(body[i], body[(i + 1) % body.length]);
+  for (const e of edges) {
     const out = [e.n[0], 0, e.n[1]];
-    const A = (y) => [e.a[0], y, e.a[1]], B = (y) => [e.b[0], y, e.b[1]];
-    mb.face("base", [A(0), B(0), B(baseH), A(baseH)], out);
-    mb.face("wall", [A(baseH), B(baseH), B(EAVE), A(EAVE)], out);
-    if (pal.wainscot) onEdge(mb, "trim", e, 0, e.len, baseH - 0.02, baseH + 0.06, 0, 0.04); // cap on the brick
+    const ops = e.ops.map((o) => ({ t0: o.t0, t1: o.t1, y0: o.y0, y1: o.y1 }));
+    const quad = (mat, t0, t1, y0, y1) => {
+      const P = (t, y) => [e.a[0] + e.dir[0] * t, y, e.a[1] + e.dir[1] * t];
+      mb.face(mat, [P(t0, y0), P(t1, y0), P(t1, y1), P(t0, y1)], out);
+    };
+    for (const [t0, t1, y0, y1] of piecesAround(0, e.len, 0, baseH, ops)) quad("base", t0, t1, y0, y1);
+    for (const [t0, t1, y0, y1] of piecesAround(0, e.len, baseH, EAVE, ops)) quad("wall", t0, t1, y0, y1);
+    if (pal.wainscot) for (const [t0, t1] of piecesAround(0, e.len, baseH - 0.02, baseH + 0.06, ops)) onEdge(mb, "trim", e, t0, t1, baseH - 0.02, baseH + 0.06, 0, 0.04);
     if (pal.siding === "lap") {
-      for (let y = baseH + 0.2; y < EAVE - 0.05; y += 0.2) onEdge(mb, "wall", e, 0, e.len, y - 0.025, y, 0, 0.018);
+      for (let y = baseH + 0.2; y < EAVE - 0.05; y += 0.2)
+        for (const [t0, t1, y0, y1] of piecesAround(0, e.len, y - 0.025, y, ops)) onEdge(mb, "wall", e, t0, t1, y0, y1, 0, 0.018);
     } else {
-      for (let t = 0.2; t < e.len - 0.1; t += 0.42) onEdge(mb, "wall", e, t - 0.025, t + 0.025, baseH, EAVE, 0, 0.025);
+      for (let t = 0.2; t < e.len - 0.1; t += 0.42)
+        for (const [t0, t1, y0, y1] of piecesAround(t - 0.025, t + 0.025, baseH, EAVE, ops)) onEdge(mb, "wall", e, t0, t1, y0, y1, 0, 0.025);
+    }
+    for (const o of e.ops) {
+      if (o.kind === "window") windowOn(mb, e, o);
+      else if (o.kind === "door") doorOn(mb, e, o);
+      else frenchDoorOn(mb, e, o);
     }
   }
   // white corner boards
-  for (const [x, z] of body) mb.box("trim", x - 0.07, x + 0.07, 0.02, EAVE, z - 0.07, z + 0.07);
+  for (const e of edges) { const [x, z] = e.a; mb.box("trim", x - 0.07, x + 0.07, 0.02, EAVE, z - 0.07, z + 0.07); }
 }
 
-function windowOn(mb, e, t, w, sill, head) {
-  onEdge(mb, "trim", e, t - w / 2 - 0.09, t + w / 2 + 0.09, sill - 0.12, head + 0.09, 0, 0.05); // casing + sill
-  onEdge(mb, "glass", e, t - w / 2, t + w / 2, sill, head, 0.05, 0.065);
-  onEdge(mb, "trim", e, t - 0.025, t + 0.025, sill, head, 0.065, 0.08); // mullion
-  onEdge(mb, "trim", e, t - w / 2, t + w / 2, (sill + head) / 2 + 0.2, (sill + head) / 2 + 0.25, 0.065, 0.08);
+// Casing as a frame (open in the middle, so the opening can be seen through from inside)
+function casing(mb, e, t0, t1, y0, y1, c, sill = true) {
+  onEdge(mb, "trim", e, t0 - c, t0, y0, y1 + c, 0, 0.05);
+  onEdge(mb, "trim", e, t1, t1 + c, y0, y1 + c, 0, 0.05);
+  onEdge(mb, "trim", e, t0, t1, y1, y1 + c, 0, 0.05);
+  if (sill) onEdge(mb, "trim", e, t0 - c, t1 + c, y0 - 0.06, y0, 0, 0.07);
 }
-function doorOn(mb, e, t) {
-  onEdge(mb, "trim", e, t - 0.56, t + 0.56, 0.02, 2.24, 0, 0.05);
-  onEdge(mb, "door", e, t - 0.46, t + 0.46, 0.02, 2.12, 0.05, 0.07);
-  onEdge(mb, "glass", e, t - 0.3, t + 0.3, 1.45, 1.95, 0.07, 0.08); // door lite
+function windowOn(mb, e, o) {
+  const { t0, t1, y0, y1 } = o, t = (t0 + t1) / 2;
+  casing(mb, e, t0, t1, y0, y1, 0.09);
+  onEdge(mb, "glass", e, t0, t1, y0, y1, 0.05, 0.065);
+  onEdge(mb, "trim", e, t - 0.025, t + 0.025, y0, y1, 0.065, 0.08); // mullion
+  onEdge(mb, "trim", e, t0, t1, (y0 + y1) / 2 + 0.2, (y0 + y1) / 2 + 0.25, 0.065, 0.08);
 }
-function frenchDoorOn(mb, e, t) {
-  onEdge(mb, "trim", e, t - 1.0, t + 1.0, 0.02, 2.3, 0, 0.05);
-  onEdge(mb, "frame", e, t - 0.92, t + 0.92, 0.02, 2.2, 0.05, 0.07);
-  onEdge(mb, "glass", e, t - 0.84, t - 0.04, 0.1, 2.12, 0.07, 0.08);
-  onEdge(mb, "glass", e, t + 0.04, t + 0.84, 0.1, 2.12, 0.07, 0.08);
+function doorOn(mb, e, o) {
+  const { t0, t1, y0, y1 } = o, t = (t0 + t1) / 2;
+  casing(mb, e, t0, t1, y0, y1, 0.1, false);
+  onEdge(mb, "door", e, t0, t1, y0, y1, 0.05, 0.07);
+  onEdge(mb, "lite", e, t - 0.3, t + 0.3, y1 - 0.67, y1 - 0.17, 0.07, 0.08); // door lite (own material so the tour can hide it with the door)
+}
+function frenchDoorOn(mb, e, o) {
+  const { t0, t1, y0, y1 } = o, t = (t0 + t1) / 2;
+  casing(mb, e, t0, t1, y0, y1, 0.08, false);
+  onEdge(mb, "frame", e, t0, t0 + 0.08, y0, y1, 0.05, 0.07);
+  onEdge(mb, "frame", e, t1 - 0.08, t1, y0, y1, 0.05, 0.07);
+  onEdge(mb, "frame", e, t0, t1, y1 - 0.08, y1, 0.05, 0.07);
+  onEdge(mb, "frame", e, t0, t1, y0, y0 + 0.1, 0.05, 0.07);
+  onEdge(mb, "frame", e, t - 0.04, t + 0.04, y0, y1, 0.05, 0.07);
+  onEdge(mb, "glass", e, t0 + 0.08, t1 - 0.08, y0 + 0.1, y1 - 0.08, 0.06, 0.065);
 }
 
-function openings(mb, body, door, french) {
-  for (let i = 0; i < body.length; i++) {
-    const e = edgeOf(body[i], body[(i + 1) % body.length]);
-    if (e.len < 1.6) continue;
-    const isFront = e.n[1] > 0.9;
-    const doorHere = isFront && Math.abs(e.a[1] - door.z) < 0.05 && door.x > Math.min(e.a[0], e.b[0]) && door.x < Math.max(e.a[0], e.b[0]);
-    const avoid = [];
-    if (doorHere) {
-      const t = (door.x - e.a[0]) / e.dir[0];
-      doorOn(mb, e, t);
-      avoid.push([t - 1.0, t + 1.0]);
-    }
-    const isRight = e.n[0] > 0.9;
-    if (french && isRight && e.len > 4) {
-      const t = e.len / 2;
-      frenchDoorOn(mb, e, t);
-      avoid.push([t - 1.5, t + 1.5]);
-    }
-    const n = Math.max(1, Math.floor(e.len / 3.0));
-    for (let k = 0; k < n; k++) {
-      const t = (e.len / n) * (k + 0.5);
-      const w = isFront && !doorHere ? 1.2 : 0.9;
-      if (avoid.some(([a, b]) => t + w / 2 > a && t - w / 2 < b)) continue;
-      if (t - w / 2 < 0.35 || t + w / 2 > e.len - 0.35) continue;
-      windowOn(mb, e, t, w, 0.95, 2.15);
-    }
-  }
+// Exterior edges (meters, model frame) with their openings, from the floor plan
+function planEdges(model, plan) {
+  const fr = planToModelFrame(model);
+  const P = ([x, y]) => [fr.x(x), fr.z(y)];
+  const ops = exteriorOpenings(plan);
+  return outline(plan, model).edges.map((pe) => {
+    const a = P(pe.a), b = P(pe.b);
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const dir = [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
+    const along = (v) => (pe.horiz ? v - pe.a[0] : v - pe.a[1]) * Math.sign(pe.horiz ? pe.b[0] - pe.a[0] : pe.b[1] - pe.a[1]) * FT;
+    const mine = ops.filter((o) => o.wall === pe.name).map((o) => {
+      const ta = along(o.at - o.w / 2), tb = along(o.at + o.w / 2);
+      return { kind: o.kind, t0: Math.min(ta, tb), t1: Math.max(ta, tb), y0: FLOOR + o.sill * FT, y1: FLOOR + o.head * FT };
+    });
+    return { a, b, len, dir, n: [pe.n[0], -pe.n[1]], ops: mine };
+  });
 }
 
 // Gable roof over a rectangle. axis "z": ridge runs front-to-back; "x": ridge runs side to side.
@@ -193,10 +230,7 @@ function buildHouse(model, style) {
   const g = geometryFt(model);
   const M = (pts) => pts.map(([x, f]) => [x * FT, f * FT]);
   const body = M(g.body);
-  const door = { x: g.door.x * FT, z: g.door.f * FT };
-  const french = model.beds >= 2 && model.shape !== "L";
-  walls(mb, pal, body);
-  openings(mb, body, door, french);
+  walls(mb, pal, planEdges(model, planFor(model.id)));
 
   if (model.shape !== "L") {
     // Rectangle: front-facing gable; covered gable porch in front of the door
@@ -207,7 +241,7 @@ function buildHouse(model, style) {
       const px0 = g.porch.x0 * FT, px1 = g.porch.x1 * FT, pz0 = g.porch.f0 * FT, pz1 = g.porch.f1 * FT;
       mb.box("porch", px0, px1, 0, 0.12, pz0, pz1);
       for (const x of [px0 + 0.12, px1 - 0.12]) mb.box("trim", x - 0.08, x + 0.08, 0.12, EAVE - 0.2, pz1 - 0.24, pz1 - 0.08);
-      gableRoof(mb, { x0: px0 + 0.05, x1: px1 - 0.05, z0: pz0 - 0.6, z1: pz1 - 0.1, axis: "z", eave: EAVE - 0.15, ends: ["hi"], overBack: false });
+      gableRoof(mb, { x0: px0 + 0.05, x1: px1 - 0.05, z0: pz0 + 0.01, z1: pz1 - 0.1, axis: "z", eave: EAVE - 0.15, ends: ["hi"], overBack: false });
     }
   } else {
     // L: side-gable main body + front-gable wing (cross gable), shed porch in the inside corner
@@ -238,8 +272,8 @@ async function writeGlb(model, style, path) {
       .createMaterial(name)
       .setBaseColorFactor([...pal[name], 1])
       .setDoubleSided(true)
-      .setRoughnessFactor(name === "glass" ? 0.12 : name === "roof" ? 0.75 : 0.8)
-      .setMetallicFactor(name === "glass" ? 0.35 : 0));
+      .setRoughnessFactor(name === "glass" || name === "lite" ? 0.12 : name === "roof" ? 0.75 : 0.8)
+      .setMetallicFactor(name === "glass" || name === "lite" ? 0.35 : 0));
 
   const mb = buildHouse(model, style);
   const mesh = doc.createMesh(`${model.id}-${style}`);
