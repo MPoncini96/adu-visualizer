@@ -3,4 +3,8 @@ node_modules
 .env*
 !.env.example
 .vercel
+
+# raw downloaded assets (processed copies live in public/)
+/assets-src/
 _to_delete/
+/ProjectADU

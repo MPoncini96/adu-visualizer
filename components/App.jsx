@@ -23,6 +23,7 @@ const HOUSE_GAP_FT = 6; // soft warning below this; 6-10 ft is the usual rule of
 const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 const compass = (deg) => COMPASS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
 const fmtFt = (m) => `${(m / FT).toFixed(1)} ft`;
+const isBuilding = (s) => s && s.kind !== "pool" && s.kind !== "patio";
 
 export default function App() {
   const [modelId, setModelId] = useState("cherry");
@@ -61,10 +62,10 @@ export default function App() {
       .map((s) => ({ ...s, xy: closedOpen(s.ring).map(([lng, lat]) => projector.toXY(lat, lng)) }))
       .filter((s) => s.xy.length >= 3 && (s.kind === "traced" || pointInPolygon(centroidXY(s.xy), lotXY)))
       .map((s) => ({ ...s, area: areaM2(s.xy) }));
-    const buildings = list.filter((s) => s.kind !== "pool").sort((a, b) => b.area - a.area);
+    const buildings = list.filter((s) => s.kind === "building" || s.kind === "house").sort((a, b) => b.area - a.area);
     return list.map((s) => ({
       ...s,
-      label: s.kind === "pool" ? "Pool" : s === buildings[0] ? "House" : s.kind === "traced" ? "Structure" : "Building",
+      label: s.label || (s.kind === "pool" ? "Pool" : s === buildings[0] ? "House" : s.kind === "traced" ? "Structure" : "Building"),
     }));
   }, [site.structures, lotXY, projector]);
   const structuresXY = useMemo(() => structures.map((s) => s.xy), [structures]);
@@ -136,7 +137,7 @@ export default function App() {
   let status = "ok";
   if (fit) {
     if (!fit.inside || fit.overlapIdx >= 0) status = "bad";
-    else if (fit.nearestIdx >= 0 && fit.nearestM < HOUSE_GAP_FT * FT) status = "tight";
+    else if (fit.nearestIdx >= 0 && fit.nearestM < HOUSE_GAP_FT * FT && isBuilding(structures[fit.nearestIdx])) status = "tight";
   }
   const lotSqft = lotXY ? areaM2(lotXY) / (FT * FT) : null;
 
@@ -165,6 +166,7 @@ export default function App() {
 
   async function selectAddress({ lat, lng, label }) {
     setShow3D(false);
+    if (GOOGLE_KEY && !mapsFailed) setView("map");
     setMessage("");
     setTrace([]);
     userMoved.current = false;
@@ -196,7 +198,7 @@ export default function App() {
     setPhase("trace");
   }
 
-  // Example property for demos: 531 Chablis Way, Manteca
+  // Example property for demos: a fictional lot with a house, patio, pool and shed (site plan only)
   function loadExample() {
     setShow3D(false);
     setMessage("");
@@ -204,10 +206,11 @@ export default function App() {
     userMoved.current = false;
     setAdu(null);
     lastValid.current = null;
-    setPlace({ label: DEMO_LOT.label });
+    setPlace({ label: DEMO_LOT.label, lat: DEMO_LOT.street.lat, lng: DEMO_LOT.street.lng, fictional: true });
     setOrigin(ringCentroid(DEMO_LOT.ring));
-    setLot({ ring: DEMO_LOT.ring, source: "county", county: DEMO_LOT.county });
-    loadSite(DEMO_LOT.ring);
+    setLot({ ring: DEMO_LOT.ring, source: "example", county: null, fictional: true });
+    setSite({ structures: DEMO_LOT.structures, neighbors: [], loaded: true });
+    setView("plan");
     setPhase("ready");
   }
 
@@ -372,6 +375,12 @@ export default function App() {
                 <button className="btn btn-light btn-sm" onClick={() => rotate(90)} disabled={!canAct}>Turn 90°</button>
                 <button className="btn btn-light btn-sm" onClick={squareToLot} disabled={!canAct}>Square to lot</button>
               </div>
+              {canAct && fit && !lot?.fictional && fit.inside && !overlapping && (
+                <div className="fit fit-caution" role="note">
+                  <div className="fit-title">Check for a pool or patio</div>
+                  <div className="fit-body">Public records only show buildings. Switch to Satellite and make sure the box isn't on a pool, patio or slab, or outline one so we can check it.</div>
+                </div>
+              )}
               {canAct && fit && (
                 <div className={`fit fit-${status}`}>
                   <div className="fit-title">
@@ -383,12 +392,14 @@ export default function App() {
                   <div className="fit-body">
                     {!fit.inside ? "It can't cross the property line. Let go and it will snap back inside."
                       : overlapping ? `It's sitting on top of the existing ${overlapping.label.toLowerCase()}. Drag it to open yard.`
-                      : status === "tight" ? `${fmtFt(fit.nearestM)} from the ${nearest.label.toLowerCase()}. Most cities want about 6–10 ft between an ADU and the main house.`
+                      : status === "tight" ? `${fmtFt(fit.nearestM)} from the ${nearest.label.toLowerCase()}. Most cities want about 6–10 ft between an ADU and other buildings.`
                       : nearest ? `${fmtFt(fit.nearestM)} from the ${nearest.label.toLowerCase()} · ${fmtFt(fit.lotClearM)} to the closest property line.`
                       : `${fmtFt(fit.lotClearM)} to the closest property line.`}
                   </div>
                   <div className="fit-body small-print">
-                    {structures.length
+                    {lot?.fictional
+                      ? "This is a made-up example lot. Try a plan on the lawn, or drag it onto the pool to see a warning."
+                      : structures.length
                       ? "Building outlines come from public records and don't include pools, sheds or patios. Make sure it doesn't overlap those."
                       : site.loaded ? "We couldn't find building outlines for this lot. Make sure it doesn't overlap your house, pool, or garage." : "Loading building outlines…"}
                   </div>
@@ -412,7 +423,7 @@ export default function App() {
         <section className="step actions">
           <div className="step-label"><span>4</span> See it and get a quote</div>
           <div className="action-grid three">
-            <button className="btn btn-dark" disabled={!canAct || !GOOGLE_KEY || mapsFailed} onClick={() => setShow3D(true)} title={isConversion ? "Garage conversions use your existing garage" : undefined}>View in 3D</button>
+            <button className="btn btn-dark" disabled={!canAct || !GOOGLE_KEY || mapsFailed || lot?.fictional} onClick={() => setShow3D(true)} title={isConversion ? "Garage conversions use your existing garage" : undefined}>View in 3D</button>
             <button className="btn btn-dark" onClick={() => setShowTour(true)}>Walk inside</button>
             <button className="btn btn-dark" onClick={() => setShowAR("outside")}>See it in your yard</button>
           </div>
@@ -420,7 +431,7 @@ export default function App() {
         </section>
 
         <footer className="fine">
-          Building outlines from FEMA's USA Structures data; property lines from {lot?.source === "traced" ? "your tracing" : `${lot?.county || "county"} County public records`}. For planning only. Your city's setback, separation and size rules apply; we confirm them before you build.
+          {lot?.fictional ? "The example lot is made up for demonstration." : <>Building outlines from FEMA's USA Structures data; property lines from {lot?.source === "traced" ? "your tracing" : `${lot?.county || "county"} County public records`}.</>} For planning only. Your city's setback, separation and size rules apply; we confirm them before you build.
         </footer>
       </aside>
 
@@ -467,13 +478,14 @@ export default function App() {
             <button className="btn btn-light" onClick={loadExample}>Try an example property</button>
           </div>
         )}
-        {GOOGLE_KEY && !mapsFailed && lot && (
+        {GOOGLE_KEY && !mapsFailed && lot && !lot.fictional && (
           <div className="view-toggle" role="group" aria-label="Map view">
             <button className={view === "map" ? "on" : ""} onClick={() => setView("map")}>Satellite</button>
             <button className={view === "plan" ? "on" : ""} onClick={() => setView("plan")}>Site plan</button>
           </div>
         )}
-        {(!GOOGLE_KEY || mapsFailed) && (
+        {lot?.fictional && <div className="stage-note">Example lot (fictional). Search your address to see your own yard on the satellite map.</div>}
+        {(!GOOGLE_KEY || mapsFailed) && !lot?.fictional && (
           <div className="stage-note">{mapsFailed ? "Satellite map unavailable: check the Google Maps key. Showing the site plan." : "Site plan view. Satellite imagery and 3D turn on once the Google Maps key is added."}</div>
         )}
 

@@ -1,9 +1,20 @@
 import "./globals.css";
 import SiteNav from "../components/SiteNav.jsx";
+import { SITE } from "../lib/site.js";
 
 export const metadata = {
-  title: "Valley ADU Studio · See your ADU before you build",
-  description: "Walk through ADU plans in 3D and place one on your own lot to check the fit. Serving Lodi to Fresno along Highway 99.",
+  metadataBase: new URL(SITE.url),
+  title: { default: `${SITE.name} · ADUs in the San Joaquin Valley`, template: `%s | ${SITE.name}` },
+  description: "Backyard ADUs, garage conversions and farm worker housing from Lodi to Fresno. Free consultation, 3D plan walk-throughs and a lot-fit visualizer.",
+  openGraph: {
+    type: "website",
+    siteName: SITE.name,
+    url: "/",
+    title: "Thinking about an ADU? Find out what you can build, free.",
+    description: "ADUs, garage conversions and farm worker housing from Lodi to Fresno. Free lot and permit check.",
+    images: [{ url: "/landing/hero-exterior.jpg", width: 1600, height: 1000, alt: "A backyard ADU with a covered porch" }],
+  },
+  twitter: { card: "summary_large_image" },
 };
 
 export const viewport = { width: "device-width", initialScale: 1, themeColor: "#f6f3ec" };

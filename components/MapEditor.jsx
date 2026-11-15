@@ -125,6 +125,8 @@ export default function MapEditor({ visible = true, projector, origin, lotRing, 
       const b = new google.maps.LatLngBounds();
       lotRing.forEach(([lng, lat]) => b.extend({ lat, lng }));
       map.fitBounds(b, 40);
+      // a small lot fits at the imagery's maximum zoom, which greys out the + button; leave a step of zoom in
+      google.maps.event.addListenerOnce(map, "idle", () => { if (map.getZoom() > 19) map.setZoom(19); });
     };
     fit();
     const el = divRef.current;

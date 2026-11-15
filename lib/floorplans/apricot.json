@@ -1,13 +1,14 @@
 {
  "id": "apricot",
- "note": "Feet. Origin = front-left exterior corner of the main body (the corner beside the front door, seen from the street). x runs right along the front wall, y runs back into the house. Wall 'at' values are the x (front/back walls) or y (side walls) of an opening's center. Furniture x,y = footprint center; face = the way the piece's front points (front=-y, back=+y, left=-x, right=+x).",
+ "note": "Feet. Origin = front-left exterior corner of the main body (beside the front door, seen from the street); x runs right along the front wall, y runs back into the house. Rooms are drawn to the wall faces. Wall 'at' = center of an opening along the wall (x for front/back walls, y for side walls). Doors: swing '+'/'-' = which side of the wall the leaf opens into (+x/+y or -x/-y); hinge 'lo'/'hi' = which end. Furniture is anchored: {room, wall, at} puts the piece's back on that side of the room facing in; groups (run, living, dining) place their parts by the same rule. Checked by scripts/check-floorplans.mjs.",
  "wallHeight": 9,
  "extWall": 0.5,
  "intWall": 0.375,
  "frontDoor": {
   "wall": "front",
   "at": 5.12,
-  "w": 3
+  "w": 3,
+  "hinge": "lo"
  },
  "rooms": [
   {
@@ -16,230 +17,194 @@
    "name": "Living",
    "x": 0.5,
    "y": 0.5,
-   "w": 15,
-   "d": 7
+   "w": 7.5,
+   "d": 9.5
   },
   {
    "id": "sleep",
-   "type": "bedroom",
+   "type": "sleep",
    "name": "Sleeping area",
-   "x": 0.5,
-   "y": 7.5,
+   "x": 8.0,
+   "y": 0.5,
    "w": 7.5,
-   "d": 7.01
+   "d": 13.8125
   },
   {
    "id": "kitchen",
    "type": "kitchen",
    "name": "Kitchen",
-   "x": 8,
-   "y": 7.5,
+   "x": 0.5,
+   "y": 10.0,
    "w": 7.5,
-   "d": 7.01
+   "d": 11.5
   },
   {
    "id": "bath",
    "type": "bath",
-   "name": "Bath",
-   "x": 0.5,
-   "y": 14.89,
-   "w": 8.51,
-   "d": 6.61
-  },
-  {
-   "id": "laundry",
-   "type": "laundry",
-   "name": "Laundry",
-   "x": 9.39,
-   "y": 14.89,
-   "w": 6.11,
-   "d": 6.61
+   "name": "Bath + laundry",
+   "x": 8.375,
+   "y": 14.6875,
+   "w": 7.125,
+   "d": 6.8125
   }
  ],
  "walls": [
   {
    "a": [
-    0.5,
-    14.7
+    8.1875,
+    14.5
    ],
    "b": [
     15.5,
-    14.7
+    14.5
    ],
    "doors": [
     {
-     "at": 7.4,
-     "w": 3
-    },
-    {
-     "at": 11.8,
-     "w": 3
+     "at": 13.0,
+     "w": 3,
+     "swing": "+",
+     "hinge": "hi"
     }
    ]
   },
   {
    "a": [
-    9.2,
-    14.7
+    8.1875,
+    14.5
    ],
    "b": [
-    9.2,
+    8.1875,
     21.5
    ]
   }
  ],
  "windows": [
   {
-   "wall": "left",
-   "at": 4,
+   "wall": "front",
+   "at": 1.8,
+   "w": 2,
+   "sill": 3,
+   "head": 7
+  },
+  {
+   "wall": "front",
+   "at": 11.5,
    "w": 3,
    "sill": 3,
    "head": 7
   },
   {
    "wall": "left",
-   "at": 11,
+   "at": 6.0,
    "w": 3,
    "sill": 3,
    "head": 7
   },
   {
-   "wall": "right",
-   "at": 11.3,
+   "wall": "left",
+   "at": 16.25,
    "w": 2.5,
    "sill": 3.5,
    "head": 7
   },
   {
    "wall": "right",
-   "at": 3.5,
+   "at": 5.5,
    "w": 3,
    "sill": 3,
    "head": 7
   },
   {
    "wall": "back",
-   "at": 4.5,
-   "w": 2,
+   "at": 9.2,
+   "w": 1.6,
    "sill": 4.5,
-   "head": 7
-  },
-  {
-   "wall": "front",
-   "at": 14,
-   "w": 2,
-   "sill": 3,
    "head": 7
   }
  ],
  "furniture": [
   {
-   "item": "rug",
-   "x": 11.5,
-   "y": 4.0,
-   "face": "front",
-   "w": 6,
-   "d": 4
-  },
-  {
-   "item": "tvStand",
-   "x": 11.5,
-   "y": 1.2,
-   "face": "back",
-   "w": 4
-  },
-  {
-   "item": "tv",
-   "x": 11.5,
-   "y": 1.2,
-   "face": "back"
-  },
-  {
-   "item": "sofa",
-   "x": 11.5,
-   "y": 6.1,
-   "face": "front",
-   "w": 5.5,
-   "d": 2.7
-  },
-  {
-   "item": "coffeeTable",
-   "x": 11.5,
-   "y": 3.8,
-   "face": "front",
-   "w": 3,
-   "d": 1.6
-  },
-  {
-   "item": "armchair",
-   "x": 2.3,
-   "y": 3,
-   "face": "right"
-  },
-  {
-   "item": "floorLamp",
-   "x": 1.2,
-   "y": 5.6,
-   "face": "right"
+   "living": true,
+   "room": "living",
+   "tv": {
+    "divider": true,
+    "x": 7.3,
+    "y": 6.0,
+    "face": "left",
+    "w": 4.5
+   },
+   "sofa": {
+    "wall": "left",
+    "at": 6.0,
+    "w": 5
+   },
+   "coffee": false,
+   "rugW": 4.5,
+   "rugD": 3.4
   },
   {
    "item": "bedDouble",
-   "x": 3.2,
-   "y": 11.1,
-   "face": "front"
+   "room": "sleep",
+   "wall": "right",
+   "at": 5.5
   },
   {
-   "run": [
-    15.5,
-    7.7
-   ],
-   "dir": "back",
-   "face": "left",
+   "run": true,
+   "room": "kitchen",
+   "wall": "left",
+   "from": 21.5,
+   "dir": "-",
    "parts": [
     [
      "fridge",
      2.5
     ],
     [
+     "cabinet",
+     1.5
+    ],
+    [
      "sink",
-     2.3
+     2.5
+    ],
+    [
+     "cabinet",
+     1.5
     ],
     [
      "range",
-     2.0
+     2.5
+    ],
+    [
+     "cabinet",
+     1.0
     ]
    ],
    "uppers": true
   },
   {
-   "item": "bathtub",
-   "x": 3.0,
-   "y": 20.25,
-   "face": "front"
+   "item": "shower",
+   "room": "bath",
+   "wall": "back",
+   "at": 14.0
   },
   {
    "item": "toilet",
-   "x": 7.8,
-   "y": 19.5,
-   "face": "left"
-  },
-  {
-   "item": "vanity",
-   "x": 1.4,
-   "y": 16.5,
-   "face": "right"
-  },
-  {
-   "item": "mirror",
-   "x": 0.62,
-   "y": 16.5,
-   "face": "right"
+   "room": "bath",
+   "wall": "back",
+   "at": 9.3
   },
   {
    "item": "washerDryer",
-   "x": 12.4,
-   "y": 20.3,
-   "face": "front"
+   "room": "bath",
+   "wall": "back",
+   "at": 11.3
+  },
+  {
+   "item": "vanity",
+   "room": "bath",
+   "wall": "left",
+   "at": 16.0
   }
  ]
 }

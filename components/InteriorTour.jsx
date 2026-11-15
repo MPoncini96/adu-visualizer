@@ -91,7 +91,7 @@ export default function InteriorTour({ model, styleId, heading = 180, onStyle, o
       if (!on) unlockedAt.current = performance.now();
       setLocked(on);
     };
-    const move = (e) => { if (document.pointerLockElement === canvasRef.current) engineRef.current?.look(e.movementX, e.movementY, 0.0022); };
+    const move = (e) => { if (document.pointerLockElement === canvasRef.current) engineRef.current?.look(e.movementX, e.movementY, 0.0016); };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     window.addEventListener("blur", blur);
@@ -124,7 +124,7 @@ export default function InteriorTour({ model, styleId, heading = 180, onStyle, o
     if (!d || d.id !== e.pointerId) return;
     const dx = e.clientX - d.x, dy = e.clientY - d.y;
     if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > 8) d.moved = true;
-    if (d.moved) engineRef.current?.look(dx, dy, touch ? 0.0045 : 0.003);
+    if (d.moved) engineRef.current?.look(dx, dy, touch ? 0.0024 : 0.0018);
     d.x = e.clientX; d.y = e.clientY;
   };
   const onPointerUp = (e) => {
@@ -179,7 +179,7 @@ export default function InteriorTour({ model, styleId, heading = 180, onStyle, o
       <div className="tour-top">
         <div className="tour-title">
           <b>{model.name}</b>
-          <span>{room ? roomLabel(room) : "Front porch"}</span>
+          <span>{room ? roomLabel(room) : "Front yard"}</span>
         </div>
         <button className="tour-close" onClick={onClose} aria-label="Leave the tour">×</button>
       </div>

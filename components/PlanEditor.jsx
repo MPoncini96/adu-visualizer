@@ -73,10 +73,10 @@ export default function PlanEditor({ lotXY, structures = [], streetEdge = null, 
       {lotXY?.length > 2 && <polygon points={pts(lotXY)} fill="#fbf6df" stroke="#c99a12" strokeWidth={0.35} />}
       {structures.map((st, i) => {
         const c = st.xy.reduce((a, p) => [a[0] + p[0] / st.xy.length, a[1] + p[1] / st.xy.length], [0, 0]);
-        const pool = st.label === "Pool";
+        const look = st.kind === "pool" || st.label === "Pool" ? ["#cfe6fa", "#5a95c8"] : st.kind === "patio" ? ["#ebe4d6", "#b3a68c"] : ["#d9d6cc", "#8d877a"];
         return (
           <g key={i} pointerEvents="none">
-            <polygon points={pts(st.xy)} fill={pool ? "#cfe6fa" : "#d9d6cc"} stroke={pool ? "#5a95c8" : "#8d877a"} strokeWidth={0.18} />
+            <polygon points={pts(st.xy)} fill={look[0]} stroke={look[1]} strokeWidth={0.18} strokeDasharray={st.kind === "patio" ? "0.6 0.4" : undefined} />
             <text x={c[0]} y={-c[1]} fontSize={1.1} textAnchor="middle" dominantBaseline="middle" fill="#5d584d" fontWeight="600">{st.label}</text>
           </g>
         );

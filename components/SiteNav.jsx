@@ -47,7 +47,12 @@ export default function SiteNav() {
             {l.label}
           </Link>
         ))}
-        <button className="btn btn-primary btn-sm site-quote" onClick={() => { setOpen(false); setQuote(true); }}>Get a quote</button>
+        <button className="btn btn-primary btn-sm site-quote" onClick={() => {
+          setOpen(false);
+          const form = path === "/" && document.getElementById("get-started");
+          if (form) { form.scrollIntoView({ behavior: "smooth", block: "start" }); form.querySelector("input[name=name]")?.focus({ preventScroll: true }); }
+          else setQuote(true);
+        }}>Free consultation</button>
       </nav>
       {quote && (
         <QuoteModal

@@ -1,13 +1,14 @@
 {
  "id": "plum",
- "note": "Feet. Origin = front-left exterior corner of the main body (the corner beside the front door, seen from the street). x runs right along the front wall, y runs back into the house. Wall 'at' values are the x (front/back walls) or y (side walls) of an opening's center. Furniture x,y = footprint center; face = the way the piece's front points (front=-y, back=+y, left=-x, right=+x).",
+ "note": "Feet. Origin = front-left exterior corner of the main body (beside the front door, seen from the street); x runs right along the front wall, y runs back into the house. Rooms are drawn to the wall faces. Wall 'at' = center of an opening along the wall (x for front/back walls, y for side walls). Doors: swing '+'/'-' = which side of the wall the leaf opens into (+x/+y or -x/-y); hinge 'lo'/'hi' = which end. Furniture is anchored: {room, wall, at} puts the piece's back on that side of the room facing in; groups (run, living, dining) place their parts by the same rule. Checked by scripts/check-floorplans.mjs.",
  "wallHeight": 9,
  "extWall": 0.5,
  "intWall": 0.375,
  "frontDoor": {
   "wall": "front",
   "at": 6,
-  "w": 3
+  "w": 3,
+  "hinge": "hi"
  },
  "rooms": [
   {
@@ -16,7 +17,7 @@
    "name": "Living",
    "x": 0.5,
    "y": 0.5,
-   "w": 11.31,
+   "w": 11.625,
    "d": 11.5
   },
   {
@@ -24,27 +25,27 @@
    "type": "kitchen",
    "name": "Kitchen",
    "x": 0.5,
-   "y": 12,
-   "w": 11.5,
+   "y": 12.0,
+   "w": 11.625,
    "d": 7.5
   },
   {
    "id": "dining",
    "type": "dining",
    "name": "Dining",
-   "x": 12.19,
-   "y": 10.39,
-   "w": 11.31,
-   "d": 9.11
+   "x": 12.125,
+   "y": 10.3875,
+   "w": 11.375,
+   "d": 9.1125
   },
   {
    "id": "hall",
    "type": "hall",
    "name": "Hall",
-   "x": 12.19,
-   "y": 3.39,
-   "w": 3.82,
-   "d": 7
+   "x": 12.5,
+   "y": 3.3875,
+   "w": 3.5125,
+   "d": 7.0
   },
   {
    "id": "bedroom",
@@ -52,33 +53,33 @@
    "name": "Bedroom",
    "x": 12.5,
    "y": -9.5,
-   "w": 11,
-   "d": 12.51
+   "w": 11.0,
+   "d": 12.5125
   },
   {
    "id": "bath",
    "type": "bath",
    "name": "Bath",
-   "x": 16.39,
-   "y": 3.39,
-   "w": 7.11,
-   "d": 6.62
+   "x": 16.3875,
+   "y": 3.3875,
+   "w": 7.1125,
+   "d": 6.625
   }
  ],
  "walls": [
   {
    "a": [
-    12,
+    12.3125,
     0
    ],
    "b": [
-    12,
+    12.3125,
     10.2
    ]
   },
   {
    "a": [
-    12,
+    12.3125,
     3.2
    ],
    "b": [
@@ -87,12 +88,16 @@
    ],
    "doors": [
     {
-     "at": 14.2,
-     "w": 3
+     "at": 14.4,
+     "w": 3,
+     "swing": "-",
+     "hinge": "lo"
     },
     {
-     "at": 20,
-     "w": 3
+     "at": 19.9,
+     "w": 3,
+     "swing": "+",
+     "hinge": "lo"
     }
    ]
   },
@@ -141,22 +146,22 @@
   },
   {
    "wall": "left",
-   "at": 6,
-   "w": 4,
+   "at": 11.0,
+   "w": 1.6,
    "sill": 3,
    "head": 7
   },
   {
    "wall": "left",
-   "at": 16,
+   "at": 15,
    "w": 3,
    "sill": 3,
    "head": 7
   },
   {
    "wall": "back",
-   "at": 7.1,
-   "w": 3,
+   "at": 5.75,
+   "w": 2.5,
    "sill": 3.5,
    "head": 7
   },
@@ -169,14 +174,14 @@
   },
   {
    "wall": "right",
-   "at": -3.5,
+   "at": -4,
    "w": 3,
    "sill": 3,
    "head": 7
   },
   {
    "wall": "right",
-   "at": 6.8,
+   "at": 8.3,
    "w": 2,
    "sill": 4.5,
    "head": 7
@@ -191,157 +196,95 @@
  ],
  "furniture": [
   {
-   "item": "rug",
-   "x": 5,
-   "y": 6,
-   "face": "right"
+   "living": true,
+   "room": "living",
+   "tv": {
+    "wall": "left",
+    "at": 6.5,
+    "w": 5
+   },
+   "sofa": {
+    "wall": "right",
+    "at": 6.5,
+    "w": 6
+   }
   },
   {
-   "item": "sofa",
-   "x": 2,
-   "y": 6,
-   "face": "right"
-  },
-  {
-   "item": "coffeeTable",
-   "x": 4.7,
-   "y": 6,
-   "face": "right"
-  },
-  {
-   "item": "tvStand",
-   "x": 11.1,
-   "y": 6,
-   "face": "left"
-  },
-  {
-   "item": "tv",
-   "x": 11.1,
-   "y": 6,
-   "face": "left"
-  },
-  {
-   "item": "floorLamp",
-   "x": 1.2,
-   "y": 1.5,
-   "face": "right"
-  },
-  {
-   "item": "plant",
-   "x": 1.3,
-   "y": 10.9,
-   "face": "right"
-  },
-  {
-   "run": [
-    0.6,
-    19.5
-   ],
-   "dir": "right",
-   "face": "front",
+   "run": true,
+   "room": "kitchen",
+   "wall": "back",
+   "from": 0.5,
+   "dir": "+",
    "parts": [
     [
      "fridge",
-     3
+     2.5
     ],
     [
      "cabinet",
-     2
+     1.5
     ],
     [
      "sink",
-     3
+     2.5
     ],
     [
      "cabinet",
-     2
+     1.5
     ],
     [
      "range",
      2.5
+    ],
+    [
+     "cabinet",
+     1.5
     ]
    ],
    "uppers": true
   },
   {
-   "item": "diningTable",
-   "x": 18,
-   "y": 15,
-   "face": "front",
-   "w": 4.5,
-   "d": 3
-  },
-  {
-   "item": "chair",
-   "x": 16.9,
-   "y": 13.1,
-   "face": "back"
-  },
-  {
-   "item": "chair",
-   "x": 19.1,
-   "y": 13.1,
-   "face": "back"
-  },
-  {
-   "item": "chair",
-   "x": 16.9,
-   "y": 16.9,
-   "face": "front"
-  },
-  {
-   "item": "chair",
-   "x": 19.1,
-   "y": 16.9,
-   "face": "front"
+   "dining": {
+    "x": 18.0,
+    "y": 14.8,
+    "w": 4,
+    "d": 3,
+    "seats": {
+     "front": 2,
+     "back": 2
+    }
+   },
+   "room": "dining"
   },
   {
    "item": "bedDouble",
-   "x": 20.1,
-   "y": -3.5,
-   "face": "left"
-  },
-  {
-   "item": "nightstand",
-   "x": 22.8,
-   "y": -6.9,
-   "face": "left"
-  },
-  {
-   "item": "nightstand",
-   "x": 22.8,
-   "y": -0.10000000000000009,
-   "face": "left"
+   "room": "bedroom",
+   "wall": "right",
+   "at": -4.0
   },
   {
    "item": "dresser",
-   "x": 15.5,
-   "y": -8.7,
-   "face": "back"
+   "room": "bedroom",
+   "wall": "front",
+   "at": 15.5
   },
   {
    "item": "bathtub",
-   "x": 20.99,
-   "y": 8.76,
-   "face": "front"
+   "room": "bath",
+   "wall": "back",
+   "at": 21.0
   },
   {
    "item": "toilet",
-   "x": 17.6,
-   "y": 6.3,
-   "face": "right"
+   "room": "bath",
+   "wall": "back",
+   "at": 17.4
   },
   {
    "item": "vanity",
-   "x": 22.6,
-   "y": 5.2,
-   "face": "left"
-  },
-  {
-   "item": "mirror",
-   "x": 23.38,
-   "y": 5.2,
-   "face": "left"
+   "room": "bath",
+   "wall": "right",
+   "at": 4.9
   }
  ]
 }

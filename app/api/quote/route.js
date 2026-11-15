@@ -29,12 +29,15 @@ export async function POST(req) {
     Phone: phone || "-",
     Email: email || "-",
     Address: clean(body.address) || "-",
+    Project: clean(body.projectType, 80) || "-",
+    Timeline: clean(body.timeline, 60) || "-",
     Model: clean(body.model) || "-",
     Style: clean(body.style) || "-",
     Placement: clean(body.placement) || "-",
     "Closest property line": clean(body.clearance) || "-",
     Location: body.lat && body.lng ? `https://maps.google.com/?q=${Number(body.lat)},${Number(body.lng)}` : "-",
     Notes: clean(body.notes, 1500) || "-",
+    Source: clean(body.source, 40) || "site",
   };
 
   const to = process.env.QUOTE_TO_EMAIL;
@@ -48,7 +51,7 @@ export async function POST(req) {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({
-        _subject: `New ADU quote request: ${lead.Name} (${lead.Model})`,
+        _subject: `New ADU lead: ${lead.Name} (${lead.Project !== "-" ? lead.Project : lead.Model})`,
         _template: "table",
         _captcha: "false",
         ...lead,
