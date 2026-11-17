@@ -4,13 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/check-floorplans.mjs && node scripts/build-models.mjs && next build",
-    "check:plans": "node scripts/check-floorplans.mjs",
+    "build": "node scripts/check-floorplans.mjs && node scripts/check-kit.mjs && node scripts/build-models.mjs && next build",
+    "check:plans": "node scripts/check-floorplans.mjs && node scripts/check-kit.mjs",
     "start": "next start",
     "models": "node scripts/build-models.mjs",
     "bake": "node scripts/bake-lighting.mjs",
     "bake:encode": "node scripts/lightmap-encode.mjs",
-    "shots": "node scripts/lighting-shots.mjs"
+    "shots": "node scripts/lighting-shots.mjs",
+    "check:tour": "node scripts/check-tour.mjs"
   },
   "dependencies": {
     "@google/model-viewer": "^4.4.0",

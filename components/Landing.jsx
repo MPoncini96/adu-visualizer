@@ -60,7 +60,7 @@ export default function Landing() {
             <li>For renters, family or farm workers</li>
             <li>One team for design, permits and construction</li>
           </ul>
-          <img className="hero-photo" src="/landing/hero-exterior.jpg" alt="A one-bedroom backyard ADU with a covered porch" width={1600} height={1000} />
+          <img className="hero-photo" src="/landing/adu-hero.jpg" alt="A detached backyard ADU with red siding behind the main house" width={1600} height={1000} />
         </div>
         <div id="get-started" className="hero-form">
           <LeadForm source="home-hero" />
@@ -124,16 +124,16 @@ export default function Landing() {
         <div className="tools">
           <ToolCard
             href="/visualizer"
-            img="/landing/visualizer.jpg"
-            alt="Site plan of an example lot with an ADU placed in the back yard"
+            img="/landing/adu-lot.jpg"
+            alt="A fenced back yard behind a house, with room for an ADU"
             title="Try a plan on your lot"
             text="Look up your address, drag a plan into your back yard, and see how it fits next to your house and property line. Then view it in 3D."
             cta="Open the 3D Visualizer"
           />
           <ToolCard
             href="/walk"
-            img="/landing/walk-inside.jpg"
-            alt="Inside The Almond: living room looking toward the dining area"
+            img="/landing/adu-inside.jpg"
+            alt="A bright open living room with the dining area and kitchen behind it"
             title="Walk inside"
             text="Step through the front door and walk every room in 3D, furnished, with room sizes. Works on a phone too."
             cta="Start a walk-through"

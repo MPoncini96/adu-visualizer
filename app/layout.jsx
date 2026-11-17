@@ -12,7 +12,7 @@ export const metadata = {
     url: "/",
     title: "Thinking about an ADU? Find out what you can build, free.",
     description: "ADUs, garage conversions and farm worker housing from Lodi to Fresno. Free lot and permit check.",
-    images: [{ url: "/landing/hero-exterior.jpg", width: 1600, height: 1000, alt: "A backyard ADU with a covered porch" }],
+    images: [{ url: "/landing/adu-hero.jpg", width: 1600, height: 1000, alt: "A detached backyard ADU behind the main house" }],
   },
   twitter: { card: "summary_large_image" },
 };

@@ -15,7 +15,7 @@ const jsonLd = [
     "@type": "HomeAndConstructionBusiness",
     name: SITE.name,
     url: SITE.url,
-    image: `${SITE.url}/landing/hero-exterior.jpg`,
+    image: `${SITE.url}/landing/adu-hero.jpg`,
     description: "ADU design, permitting and construction, garage conversions and farm worker housing in the San Joaquin Valley.",
     ...(SITE.phone ? { telephone: SITE.phone } : {}),
     areaServed: CITIES.map((c) => ({ "@type": "City", name: `${c}, CA` })),
