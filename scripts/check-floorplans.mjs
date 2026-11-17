@@ -36,4 +36,4 @@ for (const m of MODELS) {
   if (!existsSync(f)) stale.push(`${m.id} (not baked)`);
   else if (JSON.parse(readFileSync(f)).key !== bakeKey(plan, m)) stale.push(`${m.id} (plan changed since the bake)`);
 }
-if (stale.length) console.log(`Note: baked lighting missing or out of date for ${stale.join(", ")}. Run: node scripts/bake-lighting.mjs ${stale.map((x) => x.split(" ")[0]).join(" ")}`);
+if (stale.length) console.log(`Note: baked lighting missing or out of date for ${stale.join(", ")}. Run: npm run bake -- ${stale.map((x) => x.split(" ")[0]).join(" ")}`);

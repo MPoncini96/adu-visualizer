@@ -1,0 +1,33 @@
+{
+ "plan": "cherry",
+ "extra": "",
+ "phone": true,
+ "loadMs": 1643,
+ "views": {
+  "yard": {
+   "calls": 57,
+   "triangles": 78489,
+   "textures": 32,
+   "geometries": 62,
+   "fps": 20,
+   "textureMB": 24.2
+  },
+  "living": {
+   "calls": 28,
+   "triangles": 49313,
+   "textures": 32,
+   "geometries": 62,
+   "fps": 20,
+   "textureMB": 24.2
+  },
+  "kitchen": {
+   "calls": 29,
+   "triangles": 57099,
+   "textures": 32,
+   "geometries": 62,
+   "fps": 20,
+   "textureMB": 24.2
+  }
+ },
+ "errors": []
+}

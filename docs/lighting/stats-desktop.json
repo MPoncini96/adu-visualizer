@@ -1,0 +1,49 @@
+{
+ "plan": "cherry",
+ "extra": "",
+ "phone": false,
+ "loadMs": 1365,
+ "views": {
+  "yard": {
+   "calls": 75,
+   "triangles": 78680,
+   "textures": 44,
+   "geometries": 65,
+   "fps": 20,
+   "textureMB": 71.9
+  },
+  "living": {
+   "calls": 47,
+   "triangles": 52088,
+   "textures": 44,
+   "geometries": 65,
+   "fps": 20,
+   "textureMB": 71.9
+  },
+  "kitchen": {
+   "calls": 42,
+   "triangles": 57328,
+   "textures": 44,
+   "geometries": 65,
+   "fps": 20,
+   "textureMB": 71.9
+  },
+  "bedroom": {
+   "calls": 45,
+   "triangles": 55568,
+   "textures": 44,
+   "geometries": 65,
+   "fps": 20,
+   "textureMB": 71.9
+  },
+  "bath": {
+   "calls": 100,
+   "triangles": 128237,
+   "textures": 45,
+   "geometries": 65,
+   "fps": 20,
+   "textureMB": 71.9
+  }
+ },
+ "errors": []
+}
