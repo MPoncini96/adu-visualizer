@@ -3,6 +3,8 @@
 // Delivery uses FormSubmit (formsubmit.co): the very first request sends a one-time
 // activation email to that address, which must be confirmed before requests arrive.
 
+import { SITE } from "../../../lib/site.js";
+
 const clean = (v, max = 300) => String(v ?? "").replace(/[<>]/g, "").trim().slice(0, max);
 
 export async function POST(req) {
@@ -49,7 +51,15 @@ export async function POST(req) {
   try {
     const res = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(to)}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      // FormSubmit sits behind Cloudflare and refuses (403) requests that don't look like
+      // they came from a website, so send the site's own Origin/Referer and a browser UA.
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Origin: SITE.url,
+        Referer: `${SITE.url}/`,
+        "User-Agent": "Mozilla/5.0 (compatible; ValleyADUStudio/1.0; +https://www.209adus.com)",
+      },
       body: JSON.stringify({
         _subject: `New ADU lead: ${lead.Name} (${lead.Project !== "-" ? lead.Project : lead.Model})`,
         _template: "table",
@@ -58,7 +68,12 @@ export async function POST(req) {
       }),
       signal: AbortSignal.timeout(10000),
     });
-    if (!res.ok) throw new Error(`FormSubmit ${res.status}`);
+    const text = await res.text();
+    if (!res.ok) throw new Error(`FormSubmit ${res.status}: ${text.slice(0, 300)}`);
+    // FormSubmit answers 200 with success:"false" when the address hasn't been activated yet.
+    let data = {};
+    try { data = JSON.parse(text); } catch {}
+    if (String(data.success) === "false") throw new Error(`FormSubmit not delivered: ${data.message || text.slice(0, 300)}`);
     return Response.json({ ok: true, delivered: true });
   } catch (e) {
     console.error("Quote delivery failed", e, lead);
