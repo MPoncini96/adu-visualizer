@@ -1,9 +1,10 @@
 // Receives a quote request and forwards it by email.
 // The destination address lives only in the QUOTE_TO_EMAIL environment variable.
-// Delivery uses FormSubmit (formsubmit.co): the very first request sends a one-time
-// activation email to that address, which must be confirmed before requests arrive.
-
-import { SITE } from "../../../lib/site.js";
+// Delivery uses Resend (resend.com) with RESEND_API_KEY. Until a sending domain is
+// verified in Resend, the sender is onboarding@resend.dev, which can only deliver to
+// the email address the Resend account was created with (set QUOTE_TO_EMAIL to that).
+// Once 209adus.com is verified there, set QUOTE_FROM_EMAIL, e.g. "Valley ADU Studio <leads@209adus.com>".
+// (FormSubmit was dropped 2026-11-17: its Cloudflare bot check returns 403 to Vercel servers.)
 
 const clean = (v, max = 300) => String(v ?? "").replace(/[<>]/g, "").trim().slice(0, max);
 
@@ -48,32 +49,39 @@ export async function POST(req) {
     return Response.json({ ok: true, delivered: false });
   }
 
+  const key = process.env.RESEND_API_KEY;
+  if (!key) {
+    console.error("Quote request NOT emailed (RESEND_API_KEY not set):", lead);
+    return Response.json({ error: "We couldn't send that right now. Please call or try again later." }, { status: 503 });
+  }
+
+  const subject = `New ADU lead: ${lead.Name} (${lead.Project !== "-" ? lead.Project : lead.Model})`;
+  const esc = (v) => String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  const rows = Object.entries(lead)
+    .map(([k, v]) => {
+      const val = /^https?:\/\//.test(v) ? `<a href="${esc(v)}">${esc(v)}</a>` : esc(v).replace(/\n/g, "<br>");
+      return `<tr><td style="padding:6px 12px;border:1px solid #ddd;background:#f6f6f6;font-weight:600;white-space:nowrap">${esc(k)}</td><td style="padding:6px 12px;border:1px solid #ddd">${val}</td></tr>`;
+    })
+    .join("");
+  const html = `<div style="font-family:system-ui,sans-serif;font-size:15px"><h2 style="margin:0 0 12px">${esc(subject)}</h2><table style="border-collapse:collapse">${rows}</table></div>`;
+  const text = Object.entries(lead).map(([k, v]) => `${k}: ${v}`).join("\n");
+
   try {
-    const res = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(to)}`, {
+    const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      // FormSubmit sits behind Cloudflare and refuses (403) requests that don't look like
-      // they came from a website, so send the site's own Origin/Referer and a browser UA.
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Origin: SITE.url,
-        Referer: `${SITE.url}/`,
-        "User-Agent": "Mozilla/5.0 (compatible; ValleyADUStudio/1.0; +https://www.209adus.com)",
-      },
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        _subject: `New ADU lead: ${lead.Name} (${lead.Project !== "-" ? lead.Project : lead.Model})`,
-        _template: "table",
-        _captcha: "false",
-        ...lead,
+        from: process.env.QUOTE_FROM_EMAIL || "Valley ADU Studio <onboarding@resend.dev>",
+        to: to.split(",").map((s) => s.trim()).filter(Boolean),
+        ...(email ? { reply_to: email } : {}),
+        subject,
+        html,
+        text,
       }),
       signal: AbortSignal.timeout(10000),
     });
-    const text = await res.text();
-    if (!res.ok) throw new Error(`FormSubmit ${res.status}: ${text.slice(0, 300)}`);
-    // FormSubmit answers 200 with success:"false" when the address hasn't been activated yet.
-    let data = {};
-    try { data = JSON.parse(text); } catch {}
-    if (String(data.success) === "false") throw new Error(`FormSubmit not delivered: ${data.message || text.slice(0, 300)}`);
+    const out = await res.text();
+    if (!res.ok) throw new Error(`Resend ${res.status}: ${out.slice(0, 300)}`);
     return Response.json({ ok: true, delivered: true });
   } catch (e) {
     console.error("Quote delivery failed", e, lead);
