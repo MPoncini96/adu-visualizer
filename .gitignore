@@ -8,3 +8,6 @@ node_modules
 /assets-src/
 _to_delete/
 /ProjectADU
+
+# static export output
+/out/
