@@ -1,0 +1,11 @@
+{
+ "key": "8c213438",
+ "layout": "a90016b9",
+ "image": "cherry.ktx2",
+ "size": 1024,
+ "intensity": 0.653,
+ "samples": 256,
+ "denoise": "oidn",
+ "portals": 14,
+ "baked": "2026-11-14"
+}

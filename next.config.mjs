@@ -1,13 +1,10 @@
 /** @type {import('next').NextConfig} */
+// Built as plain static files and hosted on GitHub Pages (.github/workflows/pages.yml).
+// Static exports can't use redirects() or headers():
+// - old "/?model=..&ar=1" links and printed QR codes are forwarded by components/LegacyRedirect.jsx
+// - GitHub Pages already sends Access-Control-Allow-Origin: * on /models/* files
 const nextConfig = {
-  // The planner used to live at "/". Old links and printed QR codes carry these query keys.
-  async redirects() {
-    return ["model", "ar", "tour", "style"].map((key) => ({
-      source: "/", has: [{ type: "query", key }], destination: "/visualizer", permanent: false,
-    }));
-  },
-  async headers() {
-    return [{ source: "/models/:path*", headers: [{ key: "Access-Control-Allow-Origin", value: "*" }, { key: "Cache-Control", value: "public, max-age=86400" }] }];
-  },
+  output: "export",
+  images: { unoptimized: true },
 };
 export default nextConfig;

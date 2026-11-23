@@ -1,4 +1,5 @@
 import Landing, { FAQ } from "../components/Landing.jsx";
+import LegacyRedirect from "../components/LegacyRedirect.jsx";
 import { SITE, CITIES } from "../lib/site.js";
 
 export const metadata = {
@@ -31,6 +32,7 @@ export default function Page() {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
+      <LegacyRedirect />
       <Landing />
     </>
   );

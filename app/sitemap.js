@@ -1,5 +1,7 @@
 import { SITE } from "../lib/site.js";
 
+export const dynamic = "force-static";
+
 export default function sitemap() {
   const now = new Date();
   return [

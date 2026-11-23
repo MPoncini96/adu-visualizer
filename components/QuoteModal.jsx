@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { sendQuote } from "../lib/quote.js";
 
 export default function QuoteModal({ summary, onClose }) {
   const [state, setState] = useState("idle"); // idle | sending | done | error
@@ -11,13 +12,7 @@ export default function QuoteModal({ summary, onClose }) {
     setState("sending");
     setError("");
     try {
-      const res = await fetch("/api/quote", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...summary, ...form }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Something went wrong.");
+      await sendQuote({ ...summary, ...form });
       setState("done");
     } catch (err) {
       setError(err.message);

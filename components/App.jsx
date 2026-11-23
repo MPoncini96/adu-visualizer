@@ -12,6 +12,7 @@ import { GOOGLE_KEY } from "../lib/googleMaps.js";
 import PlanEditor from "./PlanEditor.jsx";
 import AddressSearch from "./AddressSearch.jsx";
 import QuoteModal from "./QuoteModal.jsx";
+import { lookupParcel, traceSiteContext } from "../lib/parcel.js";
 
 const MapEditor = dynamic(() => import("./MapEditor.jsx"), { ssr: false });
 const View3D = dynamic(() => import("./View3D.jsx"), { ssr: false });
@@ -93,8 +94,7 @@ export default function App() {
   const loadSite = useCallback(async (ring) => {
     setSite({ structures: [], neighbors: [], loaded: false });
     try {
-      const res = await fetch("/api/parcel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ring }) });
-      const data = await res.json();
+      const data = await traceSiteContext(ring);
       setSite({ structures: data.structures || [], neighbors: data.neighbors || [], loaded: true });
     } catch {
       setSite({ structures: [], neighbors: [], loaded: true });
@@ -181,8 +181,7 @@ export default function App() {
     setAdu(null);
     lastValid.current = null;
     try {
-      const res = await fetch(`/api/parcel?lat=${lat}&lng=${lng}`);
-      const data = await res.json();
+      const data = await lookupParcel(lat, lng);
       if (data.parcel) {
         setSite({ structures: data.structures || [], neighbors: data.neighbors || [], loaded: true });
         setOrigin(ringCentroid(data.parcel.ring));

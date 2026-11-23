@@ -3,6 +3,7 @@
 // prefillLead({ projectType, plan }) (scrolls here and focuses the name field).
 import { useEffect, useRef, useState } from "react";
 import { PROJECT_TYPES, TIMELINES } from "../lib/site.js";
+import { sendQuote } from "../lib/quote.js";
 
 const EVENT = "lead:prefill";
 
@@ -41,13 +42,7 @@ export default function LeadForm({ source = "home" }) {
     setError("");
     const type = PROJECT_TYPES.find((t) => t.id === form.projectType);
     try {
-      const res = await fetch("/api/quote", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, projectType: type?.label || "", model: plan, source }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Something went wrong.");
+      await sendQuote({ ...form, projectType: type?.label || "", model: plan, source });
       setState("done");
       // Conversion hook for analytics / ad tags added later (Google Ads, GA4, Meta).
       window.dataLayer = window.dataLayer || [];

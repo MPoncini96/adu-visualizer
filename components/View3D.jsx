@@ -3,6 +3,7 @@
 // Only mounted when the visitor clicks "View in 3D", so 3D tile usage stays low.
 import { useEffect, useRef, useState } from "react";
 import { loadGoogleMaps } from "../lib/googleMaps.js";
+import { getElevation } from "../lib/elevation.js";
 
 // Model orientation on the 3D map. glTF models are Y-up; Google's 3D map is Z-up.
 // Override for tuning with ?o3d=heading,tilt,roll in the page URL.
@@ -36,8 +37,7 @@ export default function View3D({ position, heading, src, outline, lotRing, heigh
         // The 3D camera works in meters above sea level, so aim it at the actual ground height
         let groundElev = 15;
         try {
-          const r = await fetch(`/api/elevation?lat=${position.lat}&lng=${position.lng}`, { signal: AbortSignal.timeout(3500) });
-          const j = await r.json();
+          const j = await getElevation(position.lat, position.lng);
           if (Number.isFinite(j.elevation)) groundElev = j.elevation;
         } catch {}
         const lib = await google.maps.importLibrary("maps3d");
